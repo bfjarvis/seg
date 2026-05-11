@@ -1,0 +1,238 @@
+---
+title: "Measuring Spatial Segregation with seg"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Measuring Spatial Segregation with seg}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Introduction
+
+The `seg` package implements segregation measures from the geographical and
+sociological literature. These include Duncan and Duncan's index of
+dissimilarity, White's index of spatial proximity, and Reardon and O'Sullivan's
+spatial segregation measures.
+
+This vignette demonstrates the current package interface using the bundled
+`segdata` example data.
+
+```{r setup}
+library(seg)
+```
+
+# Example Data
+
+The `segdata` data set contains eight hypothetical two-group population
+patterns on a 10 by 10 grid. Each pattern uses two adjacent columns. For
+example, columns `A1` and `A2` describe the first pattern.
+
+```{r data}
+data(segdata)
+
+head(segdata[, 1:4])
+```
+
+For examples that require coordinates, create the centroids of a 10 by 10 grid.
+
+```{r coordinates}
+coords <- as.matrix(expand.grid(x = seq(0.5, 9.5), y = seq(0.5, 9.5)))
+pattern_a <- segdata[, 1:2]
+
+head(coords)
+head(pattern_a)
+```
+
+# Index of Dissimilarity
+
+Duncan and Duncan's index of dissimilarity, D, is computed with `dissim()`.
+The function returns a list because spatially adjusted variants may also be
+available.
+
+```{r dissimilarity}
+d_a <- dissim(data = pattern_a)
+d_a
+
+d_a$d
+```
+
+The first hypothetical pattern is completely segregated, so its traditional D
+value is 1.
+
+```{r all-dissimilarity}
+vapply(seq_len(8), function(i) {
+  idx <- 2 * i
+  dissim(data = segdata[, (idx - 1):idx])$d
+}, numeric(1))
+```
+
+# Spatial Proximity
+
+White's index of spatial proximity is computed with `isp()`. If a distance
+matrix is not supplied, distances are computed from the coordinates.
+
+```{r spatial-proximity}
+isp(coords, data = pattern_a)
+```
+
+The optional `fun` argument controls how distances are converted to proximity.
+By default, `isp()` uses a negative exponential function.
+
+```{r spatial-proximity-custom}
+isp(coords, data = pattern_a, fun = function(d) 1 / (1 + d))
+```
+
+# Local Environments
+
+The Reardon and O'Sullivan measures are based on local environments. Use
+`localenv()` to calculate the local population composition around each point.
+The ordinary coordinate-matrix path uses compiled C code for this calculation.
+
+```{r local-environment}
+env_a <- localenv(coords, data = pattern_a, maxdist = 2)
+
+env_a
+head(env_a@env)
+```
+
+When `useExp = FALSE` and `power = 0`, all points receive equal weight. In that
+case every local environment equals the overall group means.
+
+```{r local-environment-equal-weight}
+env_equal <- localenv(coords, data = pattern_a, useExp = FALSE, power = 0)
+
+head(env_equal@env)
+colMeans(pattern_a)
+```
+
+# Reardon and O'Sullivan Measures
+
+Use `spatseg()` when you already have a `SegLocal` object.
+
+```{r spatseg}
+spatial_a <- spatseg(env_a)
+
+as.list(spatial_a)
+```
+
+Use `spseg()` as a wrapper when you want to start from coordinates and
+population data. By default, the package uses the compiled C implementation for
+the index calculations.
+
+```{r spseg}
+spatial_a_2 <- spseg(coords, data = pattern_a, maxdist = 2)
+
+as.list(spatial_a_2)
+```
+
+You can request a subset of measures with `method`.
+
+```{r selected-methods}
+selected <- spseg(
+  coords,
+  data = pattern_a,
+  method = c("information", "dissimilarity"),
+  maxdist = 2
+)
+
+as.list(selected)
+```
+
+# Working with sf Objects
+
+Several functions also accept `sf` objects. The next example builds a 10 by 10
+polygon grid and attaches `segdata` to it.
+
+```{r sf-grid}
+geom <- sf::st_polygon(
+  list(rbind(c(0, 0), c(10, 0), c(10, 10), c(0, 10), c(0, 0)))
+) |>
+  sf::st_make_grid(cellsize = 1)
+
+grid_sf <- sf::st_sf(segdata, geometry = geom)
+
+nrow(grid_sf)
+sf::st_geometry_type(grid_sf)[1]
+```
+
+If `data` is omitted, `seg` uses the non-geometry columns attached to the `sf`
+object.
+
+```{r sf-input}
+isp(grid_sf[, c("A1", "A2")])
+
+env_sf <- localenv(grid_sf[, c("A1", "A2")], maxdist = 2)
+head(env_sf@env)
+```
+
+# Smoothing
+
+The `spseg()` wrapper can compute segregation measures after constructing a
+smoothed population surface. The `"equal"` option redistributes polygon
+population values over a regular grid.
+
+```{r equal-smoothing}
+spseg(
+  grid_sf,
+  data = pattern_a,
+  smoothing = "equal",
+  nrow = 10,
+  ncol = 10,
+  maxdist = 2
+) |>
+  as.list()
+```
+
+The `"kernel"` option uses `splancs::kernel2d()` internally.
+
+```{r kernel-smoothing}
+window <- matrix(
+  c(0, 0,
+    0, 10,
+    10, 10,
+    10, 0),
+  ncol = 2,
+  byrow = TRUE
+)
+
+spseg(
+  coords,
+  data = pattern_a,
+  smoothing = "kernel",
+  nrow = 10,
+  ncol = 10,
+  window = window,
+  sigma = 1,
+  maxdist = 2
+) |>
+  as.list()
+```
+
+# Optional Spatial Adjustments
+
+The `dissim()` function can calculate spatial adjustments to D when optional
+packages are available. Morrill's adjustment uses `spdep`; Wong's shared
+boundary adjustments use `terra`.
+
+```{r optional-adjustments}
+adjusted <- dissim(
+  grid_sf,
+  data = pattern_a,
+  adjust = TRUE,
+  use_queen = FALSE
+)
+
+adjusted
+```
+
+If the optional packages are not installed, unavailable adjusted measures are
+returned as `NA`.

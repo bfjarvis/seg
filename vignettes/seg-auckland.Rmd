@@ -1,0 +1,211 @@
+---
+title: "Empirical Example: Auckland"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Empirical Example: Auckland}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Introduction
+
+This vignette uses empirical area-unit data for Auckland, New Zealand. The data
+are included as external package files so the examples can be run after the
+package is installed.
+
+```{r setup}
+library(seg)
+library(ggplot2)
+```
+
+# Load the Auckland Data
+
+Files in `inst/extdata` are installed with the package. Use `system.file()` to
+find them.
+
+```{r data-paths}
+auck_dir <- system.file("extdata", "auck", package = "seg")
+
+if (auck_dir == "") {
+  auck_dir <- file.path("..", "inst", "extdata", "auck")
+}
+
+auck_shp <- file.path(auck_dir, "auck.shp")
+auck_pop <- file.path(auck_dir, "auck_pop.csv")
+
+file.exists(auck_shp)
+file.exists(auck_pop)
+```
+
+Read the shapefile with `sf`. The shapefile contains counts for Korean
+residents and total population in 1991, 1996, 2001, and 2006.
+
+```{r read-data}
+auck <- sf::st_read(auck_shp, quiet = TRUE)
+pop <- read.csv(auck_pop)
+
+nrow(auck)
+names(auck)
+head(pop[, c("au_no", "au_name", "kr06", "pop06")])
+```
+
+For the examples below, define two mutually exclusive groups: Korean residents
+and all other residents in 2006.
+
+```{r groups}
+auck$Korean <- auck$KR06
+auck$Non_Korean <- auck$POP06 - auck$KR06
+auck$korean_share <- auck$Korean / auck$POP06
+
+summary(auck[, c("Korean", "Non_Korean", "korean_share")])
+```
+
+# Plot Raw Population Data
+
+The raw map shows the share of residents identified as Korean in each area
+unit.
+
+```{r raw-map}
+ggplot(auck) +
+  geom_sf(aes(fill = korean_share), color = NA) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(fill = "Korean share") +
+  theme_minimal()
+```
+
+The distribution is highly skewed, so a second map of the count is also useful.
+
+```{r raw-count-map}
+ggplot(auck) +
+  geom_sf(aes(fill = Korean), color = NA) +
+  scale_fill_viridis_c() +
+  labs(fill = "Korean residents") +
+  theme_minimal()
+```
+
+# Generate Local Environments
+
+`localenv()` computes the local population composition around each area unit.
+For projected coordinate systems measured in metres, the default exponential
+decay parameter can be too steep. Here, `power = 0.0002` gives a smoother local
+environment over neighbourhood-scale distances.
+
+```{r localenv}
+auck_env <- localenv(
+  auck[, c("Korean", "Non_Korean")],
+  power = 0.0002
+)
+
+auck_env
+head(auck_env@env)
+```
+
+Add the local environment share back to the `sf` object for mapping.
+
+```{r localenv-share}
+auck$local_korean_share <- auck_env@env[, "Korean"] / rowSums(auck_env@env)
+
+summary(auck$local_korean_share)
+```
+
+# Plot Local Environment Data
+
+The local environment map smooths the raw area-unit shares by considering
+nearby population composition.
+
+```{r localenv-map}
+ggplot(auck) +
+  geom_sf(aes(fill = local_korean_share), color = NA) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(fill = "Local Korean share") +
+  theme_minimal()
+```
+
+The two maps can also be compared directly.
+
+```{r raw-vs-local}
+plot_data <- rbind(
+  data.frame(
+    geometry = sf::st_geometry(auck),
+    share = auck$korean_share,
+    type = "Raw area-unit share"
+  ),
+  data.frame(
+    geometry = sf::st_geometry(auck),
+    share = auck$local_korean_share,
+    type = "Local environment share"
+  )
+)
+plot_data <- sf::st_as_sf(plot_data)
+
+ggplot(plot_data) +
+  geom_sf(aes(fill = share), color = NA) +
+  facet_wrap(~ type) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(fill = "Korean share") +
+  theme_minimal()
+```
+
+# Segregation Measures
+
+The traditional index of dissimilarity is calculated from the raw population
+counts.
+
+```{r dissimilarity}
+group_data <- sf::st_drop_geometry(auck[, c("Korean", "Non_Korean")])
+
+dissim(data = group_data)
+```
+
+White's spatial proximity index can use the same `sf` object.
+
+```{r proximity}
+isp(auck[, c("Korean", "Non_Korean")])
+```
+
+Reardon and O'Sullivan's spatial measures can be calculated from the local
+environment object.
+
+```{r spatial-measures}
+spatial_measures <- spatseg(auck_env)
+
+as.list(spatial_measures)
+```
+
+For a compact comparison:
+
+```{r measure-summary}
+spatial_list <- as.list(spatial_measures)
+
+data.frame(
+  measure = c(
+    "Dissimilarity",
+    "Spatial proximity",
+    "Spatial dissimilarity",
+    "Relative diversity",
+    "Information theory"
+  ),
+  value = c(
+    dissim(data = group_data)$d,
+    isp(auck[, c("Korean", "Non_Korean")]),
+    spatial_list$d,
+    spatial_list$r,
+    spatial_list$h
+  )
+)
+```
+
+The exposure/isolation matrix is stored separately.
+
+```{r exposure}
+spatial_list$p
+```
