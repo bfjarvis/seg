@@ -55,32 +55,30 @@ Seong-Yun Hong
 \examples{
 # uses the idealised landscapes in 'segdata'
 data(segdata)
-grd <- GridTopology(cellcentre.offset=c(0.5,0.5),
-                    cellsize=c(1,1), cells.dim=c(10,10))
-grd.sp <- as.SpatialPolygons.GridTopology(grd)
+coords <- as.matrix(expand.grid(x = seq(0.5, 9.5), y = seq(0.5, 9.5)))
 
 # complete segregation:
 # negative exponential function of distance
-xx1 <- localenv(grd.sp, data = segdata[,1:2])
-spplot(xx1, main = "Negative exponential")
+xx1 <- localenv(coords, data = segdata[,1:2])
+print(xx1)
 
 # inverse distance
-xx2 <- localenv(grd.sp, data = segdata[,1:2], useExp = FALSE)
-spplot(xx2, main = "Inverse distance")
+xx2 <- localenv(coords, data = segdata[,1:2], useExp = FALSE)
+print(xx2)
 
 # inverse distance with p = 0, i.e., weight all points equally
-xx3 <- localenv(grd.sp, data = segdata[,1:2], useExp = FALSE, power = 0)
-spplot(xx3, main = "Inverse distance with p = 0")
+xx3 <- localenv(coords, data = segdata[,1:2], useExp = FALSE, power = 0)
+print(xx3)
 
 \dontrun{
 # checkerboard pattern:
 # negative exponential function with different p values
-vv1 <- localenv(grd.sp, data = segdata[,5:6], power = 1)
+vv1 <- localenv(coords, data = segdata[,5:6], power = 1)
 spplot(vv1, main = "Negative exponetial with p = 1")
 
-vv2 <- localenv(grd.sp, data = segdata[,5:6])
+vv2 <- localenv(coords, data = segdata[,5:6])
 spplot(vv2, main = "Negative exponetial with p = 2")
 
-vv3 <- localenv(grd.sp, data = segdata[,5:6], power = 3)
+vv3 <- localenv(coords, data = segdata[,5:6], power = 3)
 spplot(vv3, main = "Negative exponetial with p = 3")}
 }

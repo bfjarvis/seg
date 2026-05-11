@@ -42,7 +42,7 @@ p <- rep(NA, 8) # index of spatial proximity
 cols <- rep("white", 100)
 for (i in 1:8) {
   idx <- 2 * i
-  d[i] <- dissim(segdata[,(idx-1):idx])
+  d[i] <- dissim(data = segdata[,(idx-1):idx])$d
   p[i] <- isp(grd_sf, data = segdata[,(idx-1):idx])
   full <- segdata[,(idx-1)] == 100
   half <- segdata[,(idx-1)] == 50

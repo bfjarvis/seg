@@ -53,7 +53,7 @@ spatseg <- function(env, method = "all", useC = TRUE, negative.rm = FALSE,
                       "diversity" %in% method, "dissimilarity" %in% method)
     tmp <- .Call("spsegIDX", as.vector(dd), as.vector(ee), 
                  as.integer(m), as.integer(method_flags))
-    results <- list()
+    results <- list(p = P, h = H, r = R, d = D)
     n <- m^2
     if (!is.na(tmp[1])) {
       results$p <- matrix(tmp[1:n], ncol = m, byrow = TRUE)

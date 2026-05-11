@@ -63,7 +63,8 @@ print.SegLocal <- function(x, ...) {
 # ------------------------------------------------------------------------------
 plot.SegLocal <- function(x, which.col = 1:ncol(x@env), main = NULL, ...) {
   validObject(x)
-  library(ggplot2)
+  if (!requireNamespace("ggplot2", quietly = TRUE))
+    stop("package 'ggplot2' is required for plotting", call. = FALSE)
   
   df <- as.data.frame(cbind(x@coords, x@env))
   colnames(df) <- c("x", "y", colnames(x@env))
@@ -79,18 +80,21 @@ plot.SegLocal <- function(x, which.col = 1:ncol(x@env), main = NULL, ...) {
 
 points.SegLocal <- function(x, which.col = 1, ...) {
   validObject(x)
-  library(ggplot2)
+  if (!requireNamespace("ggplot2", quietly = TRUE))
+    stop("package 'ggplot2' is required for plotting", call. = FALSE)
   
   df <- as.data.frame(cbind(x@coords, x@env))
   colnames(df) <- c("x", "y", colnames(x@env))
   
   if (length(which.col) > 1) warning("'which.col' has a length > 1", call. = FALSE)
   
-  ggplot(df, aes(x = x, y = y)) +
-    geom_point(aes(size = df[, which.col]), color = "red", alpha = 0.6) +
-    scale_size_continuous(range = c(1, 6)) +
-    theme_minimal() +
-    labs(title = paste("Variable:", colnames(x@env)[which.col]), size = "Value")
+  ggplot2::ggplot(df, ggplot2::aes(x = x, y = y)) +
+    ggplot2::geom_point(ggplot2::aes(size = df[, which.col]), color = "red",
+                        alpha = 0.6) +
+    ggplot2::scale_size_continuous(range = c(1, 6)) +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(title = paste("Variable:", colnames(x@env)[which.col]),
+                  size = "Value")
 }
 
 # ------------------------------------------------------------------------------

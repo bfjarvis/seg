@@ -5,7 +5,7 @@
 Create a new object of \code{\link{SegLocal-class}} from a matrix of coordinates and population data.
 }
 \usage{
-SegLocal(coords, data, env, proj4string = CRS(as.character(NA)))
+SegLocal(coords, data, env, proj4string = st_crs(as.character(NA)))
 }
 \arguments{
   \item{coords}{a numeric matrix or data frame with coordinates (each row is a point).}

@@ -5,7 +5,7 @@
 Creates a new object of \code{\link{SegSpatial-class}}.
 }
 \usage{
-SegSpatial(d, r, h, p, coords, data, env, proj4string = CRS(as.character(NA)))
+SegSpatial(d, r, h, p, coords, data, env, proj4string = st_crs(as.character(NA)))
 }
 \arguments{
   \item{d}{an object of class \code{numeric} containing the spatial dissimilarity index value.}
