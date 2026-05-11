@@ -95,14 +95,15 @@ ggplot(auck) +
 # Generate Local Environments
 
 `localenv()` computes the local population composition around each area unit.
-For projected coordinate systems measured in metres, the default exponential
-decay parameter can be too steep. Here, `power = 0.0002` gives a smoother local
-environment over neighbourhood-scale distances.
+By default, distances are normalized by the bandwidth before spatial weights are
+calculated, so the `power` parameter has the same interpretation across
+coordinate systems with different measurement units. When `maxdist` is omitted,
+`seg` uses the geometric mean of positive pairwise distances as the bandwidth,
+estimated from a reproducible sample of points for large data sets.
 
 ```{r localenv}
 auck_env <- localenv(
-  auck[, c("Korean", "Non_Korean")],
-  power = 0.0002
+  auck[, c("Korean", "Non_Korean")]
 )
 
 auck_env
@@ -152,6 +153,109 @@ ggplot(plot_data) +
   facet_wrap(~ type) +
   scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
   labs(fill = "Korean share") +
+  theme_minimal()
+```
+
+# Bandwidth Sensitivity
+
+Spatial segregation measures can change with the geographic scale used to
+construct local environments. The following example calculates local
+environments for bandwidths from 500 metres to 10 kilometres in 500 metre
+increments.
+
+```{r bandwidth-sequence}
+bandwidths <- seq(500, 10000, by = 500)
+
+bandwidth_env <- lapply(
+  bandwidths,
+  function(bw) {
+    localenv(
+      auck[, c("Korean", "Non_Korean")],
+      maxdist = bw
+    )
+  }
+)
+
+names(bandwidth_env) <- paste0(bandwidths / 1000, " km")
+```
+
+First, convert a subset of the local environment outputs to an `sf` object for
+faceted mapping.
+
+```{r bandwidth-map-data}
+map_bandwidths <- c(500, 2000, 5000, 10000)
+map_index <- match(map_bandwidths, bandwidths)
+
+bandwidth_maps <- do.call(
+  rbind,
+  lapply(map_index, function(i) {
+    env <- bandwidth_env[[i]]
+    out <- auck[, c("AU_NAME")]
+    out$bandwidth <- paste0(bandwidths[i] / 1000, " km")
+    out$local_korean_share <- env@env[, "Korean"] / rowSums(env@env)
+    out
+  })
+)
+
+bandwidth_maps$bandwidth <- factor(
+  bandwidth_maps$bandwidth,
+  levels = paste0(map_bandwidths / 1000, " km")
+)
+```
+
+```{r bandwidth-map, fig.height=6}
+ggplot(bandwidth_maps) +
+  geom_sf(aes(fill = local_korean_share), color = NA) +
+  facet_wrap(~ bandwidth, ncol = 2) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
+  labs(fill = "Local Korean share") +
+  theme_minimal()
+```
+
+Next, calculate the segregation measures at every bandwidth.
+
+```{r bandwidth-measures}
+bandwidth_measures <- do.call(
+  rbind,
+  lapply(seq_along(bandwidths), function(i) {
+    measures <- as.list(spatseg(bandwidth_env[[i]]))
+    data.frame(
+      bandwidth_m = bandwidths[i],
+      bandwidth_km = bandwidths[i] / 1000,
+      dissimilarity = measures$d,
+      diversity = measures$r,
+      information = measures$h,
+      korean_isolation = measures$p["Korean", "Korean"]
+    )
+  })
+)
+
+head(bandwidth_measures)
+```
+
+Plotting each measure against bandwidth gives a scale profile of segregation.
+
+```{r bandwidth-curve}
+curve_data <- reshape(
+  bandwidth_measures,
+  varying = c("dissimilarity", "diversity", "information", "korean_isolation"),
+  v.names = "value",
+  timevar = "measure",
+  times = c(
+    "Spatial dissimilarity",
+    "Relative diversity",
+    "Information theory",
+    "Korean isolation"
+  ),
+  idvar = "bandwidth_km",
+  direction = "long"
+)
+
+ggplot(curve_data, aes(x = bandwidth_km, y = value)) +
+  geom_line() +
+  geom_point(size = 1.5) +
+  facet_wrap(~ measure, scales = "free_y") +
+  labs(x = "Bandwidth (km)", y = "Measure value") +
   theme_minimal()
 ```
 

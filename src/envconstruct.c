@@ -61,7 +61,9 @@ SEXP envconstruct(SEXP x, SEXP y, SEXP v, SEXP dim, SEXP p, SEXP useExp,
         /* ---------------------------------------------------------------------
          Code contribution from Benjamin Jarvis, 2 August 2018
          --------------------------------------------------------------------- */         
-         if (expF == 0)  // normal-like biweight kernel
+         if (power == 0)
+           weight = 1;
+         else if (expF == 0)  // normal-like biweight kernel
            weight = pow(1 - pow(dxy/dist, power), power);
          else           // scaled and normalized exponential decay
            weight = (exp(dxy/dist * power * -1) - 

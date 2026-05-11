@@ -20,12 +20,23 @@ localenv.get <- function(sprel, data, power, useExp, scale, maxdist, tol) {
       stop("'data' must have the same number of rows as 'sprel'", call. = FALSE)
     env <- matrix(nrow = nrow(data), ncol = ncol(data))
     for (i in 1:nrow(data)) {
-      if (useExp)
+      if (scale) {
+        d <- sprel[i,] / maxdist
+        if (power == 0)
+          weight <- rep(1, length(d))
+        else if (useExp)
+          weight <- (exp(d * power * -1) - exp(power * -1)) /
+            (1 - exp(power * -1))
+        else
+          weight <- (1 - d^power)^power
+      } else if (useExp) {
         weight <- exp(power * sprel[i,] * -1)
-      else
+      } else {
         weight <- 1/(sprel[i,] + tol)^power
+      }
       if (maxdist >= 0)
         weight[which(sprel[i,] > maxdist)] <- 0
+      weight[weight < 0] <- 0
       env[i,] <- apply(data, 2, function(z) sum(z * weight)/sum(weight))
     }
   } 

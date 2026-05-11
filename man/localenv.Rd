@@ -6,7 +6,7 @@
 \code{localenv} calculates the local population composition at each data point from a matrix of coordinates, or an object of class \code{Spatial} or \code{ppp}.
 }
 \usage{
-localenv(x, data, power = 2, useExp = TRUE, scale = FALSE, maxdist, sprel, 
+localenv(x, data, power = 2, useExp = TRUE, scale = TRUE, maxdist, sprel, 
          tol = .Machine$double.eps)
 }
 \arguments{
@@ -14,7 +14,7 @@ localenv(x, data, power = 2, useExp = TRUE, scale = FALSE, maxdist, sprel,
   \item{data}{an object of class \code{matrix}, or one that can be coerced to that class. The number of rows in \sQuote{data} should equal the number of points in \sQuote{x}, and the number of columns should be greater than one (at least two population groups are required). This can be missing if \sQuote{x} has a data frame attached to it.}
   \item{power}{a numeric value that determines the change rate of a distance weight function. If zero, all data points have the same weight regardless of the distance. Typically 1-5.}
   \item{useExp}{logical. If FALSE, use a simple inverse distance function instead of a negative exponential function. See \sQuote{Details}.}
-  \item{scale}{logical. If TRUE, the distances between points in \sQuote{x} are scaled so the weights are not affected by the measurement unit. The default is FALSE for consistency with the previous version.}
+  \item{scale}{logical. If TRUE, distances are divided by the bandwidth before weights are calculated so results are not affected by the coordinate measurement unit. The default is TRUE.}
   \item{maxdist}{an optional numeric value specifying a search radius for the construction of each local environment. Must be a positive value, or zero.}
   \item{sprel}{an optional object of class \code{dist} or \code{nb}. See \sQuote{Details}.}
   \item{tol}{a small, positive non-zero value. If \sQuote{useExp} is FALSE, this value will be added to the denominator to avoid the divide-by-zero error.}
@@ -27,14 +27,14 @@ By default, the weight of each point is calculated from a negative exponential f
 \deqn{w(d) = e^{-d \times power}}{%
       w(d) = exp(-d * power)}
 
-where \emph{d} is the Euclidean distance between two points.
+where \emph{d} is the Euclidean distance between two points. By default, \emph{d} is normalized by the bandwidth before weights are calculated. If \sQuote{maxdist} is supplied, it is used as the bandwidth and as a search radius. If \sQuote{maxdist} is not supplied, the geometric mean of positive pairwise distances is used as the bandwidth. For large data sets, this bandwidth is estimated from a reproducible sample of points.
 
 If \sQuote{useExp} is FALSE, a simple inverse distance function is used to calculate the weight of each point:
 
 \deqn{w(d) = \frac{1}{(d + error)^{power}}}{%
       w(d) = 1 / (d + error)^power}
 
-If \sQuote{maxdist} is not provided (default), all data points in the study area are used for the construction of each local environment. It is recommended to specify this parameter to speed up the calculation process.
+If \sQuote{maxdist} is not provided (default), the automatic bandwidth uses the geometric mean of pairwise distances, which is less sensitive to long-distance pairs than the arithmetic mean. To avoid the cost of a full pairwise distance matrix for large data sets, the automatic bandwidth is estimated from a reproducible sample of 500 points. It is still recommended to specify \sQuote{maxdist} when a substantively meaningful bandwidth is known, or to speed up the calculation process.
 
 If a distance measure other than the Euclidean distance is required to represent spatial proximity between the points, users can provide an object of class \code{dist}, which contains the distances between all pairs of the points, through an optional argument \sQuote{sprel}. One convenient way of obtaining such information may be the use of the function \code{dist}, which offers a variety of distance measures, such as Manhattan, Canberra, and Minkowski.
 
