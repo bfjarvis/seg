@@ -218,7 +218,7 @@ Next, calculate the segregation measures at every bandwidth.
 bandwidth_measures <- do.call(
   rbind,
   lapply(seq_along(bandwidths), function(i) {
-    measures <- as.list(spatseg(bandwidth_env[[i]]))
+    measures <- as.list(spseg(bandwidth_env[[i]], power=5))
     data.frame(
       bandwidth_m = bandwidths[i],
       bandwidth_km = bandwidths[i] / 1000,
@@ -280,7 +280,7 @@ Reardon and O'Sullivan's spatial measures can be calculated from the local
 environment object.
 
 ```{r spatial-measures}
-spatial_measures <- spatseg(auck_env)
+spatial_measures <- spseg(auck_env)
 
 as.list(spatial_measures)
 ```

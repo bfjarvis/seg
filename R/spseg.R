@@ -5,7 +5,11 @@
 # ------------------------------------------------------------------------------
 spseg <- function(x, data, method = "all", smoothing = "none", 
                   nrow = 100, ncol = 100, window, sigma, useC = TRUE, negative.rm = FALSE, 
-                  tol = .Machine$double.eps, verbose = FALSE, ...) {
+                  verbose = FALSE, ...) {
+  dots <- spseg_dots(...)
+
+  if (inherits(x, "SegLocal"))
+    return(spseg_from_localenv(x, method, useC, negative.rm))
   
   # ----------------------------------------------------------------------------
   # STEP 1 Data preparation
@@ -19,45 +23,19 @@ spseg <- function(x, data, method = "all", smoothing = "none",
   data <- tmp$data
   proj4string <- tmp$proj4string
   
-  # Validate smoothing argument
-  smoothing <- match.arg(smoothing, c("none", "kernel", "equal"), several.ok = FALSE)
-  
-  # ----------------------------------------------------------------------------
-  # STEP 2 Estimate the data surface
-  # ----------------------------------------------------------------------------
-  if (smoothing == "equal") {
-    tmp <- surface.equal(x, data, nrow, ncol, verbose)
-    coords <- tmp$coords
-    data <- tmp$data
-  }
-  
-  else if (smoothing == "kernel") {
-    if (missing(window)) {
-      x_range <- range(coords[,1])
-      y_range <- range(coords[,2])
-      window <- matrix(c(x_range[1], y_range[1], 
-                         x_range[1], y_range[2], 
-                         x_range[2], y_range[2], 
-                         x_range[2], y_range[1]), 
-                       ncol = 2, byrow = TRUE)
-    }
-    
-    if (missing(sigma))
-      sigma <- min(bw.nrd(coords[,1]), bw.nrd(coords[,2]))
-    
-    tmp <- surface.kernel(coords, data, sigma, nrow, ncol, window, verbose)
-    coords <- tmp$coords
-    data <- tmp$data
-  }
+  tmp <- spseg_surface(x, coords, data, smoothing, nrow, ncol, window, sigma,
+                       verbose)
+  coords <- tmp$coords
+  data <- tmp$data
   
   # ----------------------------------------------------------------------------
   # STEP 3 Calculate the population composition of each local environment
   # ----------------------------------------------------------------------------
-  env <- localenv(coords, data, ...)
+  env <- do.call(localenv, c(list(x = coords, data = data), dots))
   env <- update(env, proj4string = st_crs(proj4string))
   
   # ----------------------------------------------------------------------------
   # STEP 4 Compute the segregation indices
   # ----------------------------------------------------------------------------
-  spatseg(env, method, useC, negative.rm, tol)
+  spseg_from_localenv(env, method, useC, negative.rm)
 }

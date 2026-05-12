@@ -87,7 +87,7 @@ SEXP spsegIDX(SEXP Rx, SEXP Ry, SEXP Rm, SEXP Ridx)
       INDEX = j + i * nrow;
       xTmp += x[INDEX];
       yTmp += y[INDEX];
-      yProp[INDEX] = y[INDEX] / yRowSum[j];
+      yProp[INDEX] = yRowSum[j] > 0 ? y[INDEX] / yRowSum[j] : 0.0;
     }
     xColSum[i] = xTmp;
     yColSum[i] = yTmp;
@@ -151,7 +151,7 @@ SEXP spsegIDX(SEXP Rx, SEXP Ry, SEXP Rm, SEXP Ridx)
         if (yProp[INDEX] != 0)
           xTmp -= yProp[INDEX] * log10(yProp[INDEX]) / logM;  // Sum (1)
         // Overall regional entropy E
-        if (i == 0)
+        if (i == 0 && xProp[j] > 0)
           E -= xProp[j] * (log10(xProp[j]) / log10(ncol));
       }
       yTmp += xRowSum[i] * xTmp;                              // Sum (2)

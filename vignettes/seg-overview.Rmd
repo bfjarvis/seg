@@ -116,10 +116,10 @@ colMeans(pattern_a)
 
 # Reardon and O'Sullivan Measures
 
-Use `spatseg()` when you already have a `SegLocal` object.
+Use `spseg()` when you already have a `SegLocal` object.
 
-```{r spatseg}
-spatial_a <- spatseg(env_a)
+```{r spseg-localenv}
+spatial_a <- spseg(env_a)
 
 as.list(spatial_a)
 ```

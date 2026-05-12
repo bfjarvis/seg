@@ -1,6 +1,5 @@
 \name{localenv}
 \alias{localenv}
-\alias{localenv.get}
 \title{Local Population Composition}
 \description{
 \code{localenv} calculates the local population composition at each data point from a matrix of coordinates, or an object of class \code{Spatial} or \code{ppp}.
@@ -50,7 +49,7 @@ Note that this function is not to interpolate between data points. The calculati
 Seong-Yun Hong
 }
 \seealso{
-\code{\link{SegLocal-class}}, \code{\link{spatseg}}, \code{dist}
+\code{\link{SegLocal-class}}, \code{\link{spseg}}, \code{dist}
 }
 \examples{
 # uses the idealised landscapes in 'segdata'

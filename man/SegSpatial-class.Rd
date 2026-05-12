@@ -11,7 +11,7 @@
 \alias{spplot,SegSpatial-method}
 
 \title{Class SegSpatial}
-\description{A class to hold results from \code{\link{spatseg}}.}
+\description{A class to hold results from \code{\link{spseg}}.}
 \section{Objects from the Class}{
 Objects can be created by calls to \code{\link{spseg}}, or the constructor \code{\link{SegSpatial}}.
 }
