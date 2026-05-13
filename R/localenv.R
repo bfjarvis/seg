@@ -3,11 +3,25 @@
 #
 # Author: Seong-Yun Hong <hong.seongyun@gmail.com>
 # ------------------------------------------------------------------------------
-localenv <- function(x, data, power = 2, useExp = TRUE, scale = TRUE,
-                     maxdist, sprel, tol = .Machine$double.eps) {
+localenv <- function(x, data, power = 3,
+                     weighting = c("biweight", "unweighted", "inverse",
+                                   "exponential"),
+                     normalize = TRUE, maxdist, sprel,
+                     useExp = NULL, scale = NULL, ...) {
   
   tmp <- suppressMessages(chksegdata(x, data))
   coords <- tmp$coords; data <- tmp$data; proj4string <- tmp$proj4string
+  .localenv_dots(...)
+  useExp_supplied <- !missing(useExp)
+  scale_supplied <- !missing(scale)
+  if (!useExp_supplied)
+    useExp <- NULL
+  if (!scale_supplied)
+    scale <- NULL
+  weighting <- if (missing(weighting)) "biweight" else match.arg(weighting)
+  normalize <- isTRUE(normalize)
+  .localenv_legacy_message(useExp_supplied, scale_supplied)
+  .localenv_settings_message(weighting, power, normalize)
   
   maxdist_missing <- missing(maxdist)
   if (maxdist_missing)
@@ -30,18 +44,20 @@ localenv <- function(x, data, power = 2, useExp = TRUE, scale = TRUE,
     stop("invalid object 'sprel'", call. = FALSE)
   }
 
-  if (scale && relation_type != "nb") {
+  if (normalize && relation_type != "nb") {
     if (maxdist_missing) {
       maxdist <- .geometric_mean_distance(relation)
     }
     if (maxdist <= 0)
-      stop("'maxdist' must be greater than 0 when 'scale' is TRUE",
+      stop("'maxdist' must be greater than 0 when 'normalize' is TRUE",
            call. = FALSE)
   }
 
   env <- switch(relation_type,
-    coords = localenv_coords(relation, data, power, useExp, scale, maxdist, tol),
-    dist = localenv_dist(relation, data, power, useExp, scale, maxdist, tol),
+    coords = localenv_coords(relation, data, power, weighting, normalize,
+                             maxdist),
+    dist = localenv_dist(relation, data, power, weighting, normalize,
+                         maxdist),
     nb = localenv_nb(relation, data)
   )
   

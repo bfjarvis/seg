@@ -8,12 +8,12 @@
 */
   
   /* .Call calls */
-extern SEXP envconstruct(SEXP x, SEXP y, SEXP v, SEXP dim, SEXP p, SEXP useExp, 
-                         SEXP normalise, SEXP d, SEXP e);
+extern SEXP envconstruct(SEXP x, SEXP y, SEXP v, SEXP dim, SEXP p,
+                         SEXP weighting, SEXP normalise, SEXP d);
 extern SEXP spsegIDX(SEXP Rx, SEXP Ry, SEXP Rm, SEXP Ridx);
 
 static const R_CallMethodDef CallEntries[] = {
-  {"envconstruct", (DL_FUNC) &envconstruct, 9},
+  {"envconstruct", (DL_FUNC) &envconstruct, 8},
   {"spsegIDX",     (DL_FUNC) &spsegIDX,     4},
   {NULL, NULL, 0}
 };

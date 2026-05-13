@@ -10,19 +10,24 @@
 setAs("SegLocal", "sf", 
       function(from) {
         validObject(from)
-        st_as_sf(data.frame(from@data, geometry = st_sfc(st_multipoint(from@coords))), crs = st_crs(from@proj4string))
+        st_as_sf(data.frame(from@env, x = from@coords[, 1], y = from@coords[, 2]),
+                 coords = c("x", "y"), crs = st_crs(from@proj4string))
       })
 
 setAs("SegLocal", "SpatialPointsDataFrame", 
       function(from) {
         validObject(from)
-        st_as_sf(data.frame(from@data, geometry = st_sfc(st_multipoint(from@coords))), crs = st_crs(from@proj4string))
+        SpatialPointsDataFrame(coords = from@coords,
+                               data = data.frame(from@env),
+                               proj4string = as(from@proj4string, "CRS"))
       })
 
 setAs("SegLocal", "SpatialPixelsDataFrame", 
       function(from) {
         validObject(from)
-        st_as_sf(data.frame(from@data, geometry = st_sfc(st_multipoint(from@coords))), crs = st_crs(from@proj4string))
+        SpatialPixelsDataFrame(points = from@coords,
+                               data = data.frame(from@env),
+                               proj4string = as(from@proj4string, "CRS"))
       })
 
 setAs("SpatialPointsDataFrame", "SegLocal", 
@@ -96,6 +101,16 @@ points.SegLocal <- function(x, which.col = 1, ...) {
     ggplot2::labs(title = paste("Variable:", colnames(x@env)[which.col]),
                   size = "Value")
 }
+
+setMethod("spplot", signature(obj = "SegLocal"), function(obj, ...) {
+  validObject(obj)
+  spO <- try(as(as(obj, "sf"), "Spatial"), silent = TRUE)
+  if (inherits(spO, "try-error"))
+    stop("failed to convert 'obj' to a spatial object for spplot",
+         call. = FALSE)
+
+  spplot(spO, ...)
+})
 
 # ------------------------------------------------------------------------------
 # Summary

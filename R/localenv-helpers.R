@@ -37,7 +37,36 @@
   env
 }
 
-localenv_coords <- function(coords, data, power, useExp, scale, maxdist, tol) {
+.localenv_weighting_id <- function(weighting) {
+  match(weighting, c("unweighted", "biweight", "inverse", "exponential")) - 1L
+}
+
+.localenv_legacy_message <- function(useExp_supplied, scale_supplied) {
+  old_args <- c(if (useExp_supplied) "useExp", if (scale_supplied) "scale")
+  if (length(old_args) > 0)
+    message("Ignoring deprecated localenv argument(s): ",
+            paste(old_args, collapse = ", "),
+            ". See ?localenv for the current weighting syntax.")
+}
+
+.localenv_settings_message <- function(weighting, power, normalize) {
+  message("localenv weighting: ", weighting, "; power: ", power,
+          "; normalize: ", normalize)
+}
+
+.localenv_dots <- function(...) {
+  dots <- list(...)
+  if ("tol" %in% names(dots)) {
+    message("Ignoring deprecated localenv argument: tol. See ?localenv.")
+    dots$tol <- NULL
+  }
+  if (length(dots) > 0)
+    stop("unused argument(s): ", paste(names(dots), collapse = ", "),
+         call. = FALSE)
+  invisible(NULL)
+}
+
+localenv_coords <- function(coords, data, power, weighting, normalize, maxdist) {
   if (nrow(coords) != nrow(data))
     stop("'data' must have the same number of rows as 'coords'", call. = FALSE)
 
@@ -45,35 +74,44 @@ localenv_coords <- function(coords, data, power, useExp, scale, maxdist, tol) {
   yval <- coords[, 2]
   dim <- ncol(data)
   env <- .Call("envconstruct", xval, yval, as.vector(data), as.integer(dim),
-               power, as.integer(useExp), as.integer(scale), maxdist, tol)
+               power, as.integer(.localenv_weighting_id(weighting)),
+               as.integer(normalize), maxdist)
 
   .restore_env_dimnames(env, data)
 }
 
-localenv_dist <- function(sprel, data, power, useExp, scale, maxdist, tol) {
+localenv_dist <- function(sprel, data, power, weighting, normalize, maxdist) {
   sprel <- as.matrix(sprel)
   if (nrow(sprel) != nrow(data))
     stop("'data' must have the same number of rows as 'sprel'", call. = FALSE)
 
   env <- matrix(nrow = nrow(data), ncol = ncol(data))
   for (i in 1:nrow(data)) {
-    if (scale) {
-      d <- sprel[i, ] / maxdist
-      if (power == 0)
-        weight <- rep(1, length(d))
-      else if (useExp)
-        weight <- (exp(d * power * -1) - exp(power * -1)) /
-          (1 - exp(power * -1))
-      else
-        weight <- (1 - d^power)^power
-    } else if (useExp) {
-      weight <- exp(power * sprel[i, ] * -1)
-    } else {
-      weight <- 1 / (sprel[i, ] + tol)^power
-    }
+    in_band <- if (maxdist >= 0) sprel[i, ] <= maxdist else
+      rep(TRUE, nrow(sprel))
+    bw <- if (normalize) maxdist else 1
+    if (normalize && maxdist < 0)
+      bw <- .geometric_mean_distance(as.dist(sprel))
+    if (bw <= 0)
+      bw <- 1
 
-    if (maxdist >= 0)
-      weight[which(sprel[i, ] > maxdist)] <- 0
+    d <- sprel[i, ]
+    positive_neighbors <- d[in_band & d > 0]
+    local_tol <- if (length(positive_neighbors) > 0) min(positive_neighbors) / 2 else
+      bw
+    d_inverse <- d
+    d_inverse[d_inverse == 0] <- local_tol
+
+    weight <- switch(weighting,
+      unweighted = rep(1, length(d)),
+      biweight = (1 - (d / bw)^power)^power,
+      inverse = 1 / ((d_inverse / bw)^power),
+      exponential = exp(-d / bw)
+    )
+
+    if (weighting == "biweight")
+      weight[d > bw] <- 0
+    weight[!in_band] <- 0
     weight[weight < 0] <- 0
     env[i, ] <- apply(data, 2, function(z) sum(z * weight) / sum(weight))
   }

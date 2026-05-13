@@ -96,8 +96,9 @@ ggplot(auck) +
 
 `localenv()` computes the local population composition around each area unit.
 By default, distances are normalized by the bandwidth before spatial weights are
-calculated, so the `power` parameter has the same interpretation across
-coordinate systems with different measurement units. When `maxdist` is omitted,
+calculated. The default weighting scheme is a biweight kernel with `power = 3`,
+and alternatives include unweighted, inverse distance, and exponential weights.
+When `maxdist` is omitted,
 `seg` uses the geometric mean of positive pairwise distances as the bandwidth,
 estimated from a reproducible sample of points for large data sets.
 
@@ -164,7 +165,16 @@ environments for bandwidths from 500 metres to 10 kilometres in 500 metre
 increments.
 
 ```{r bandwidth-sequence}
-bandwidths <- seq(500, 10000, by = 500)
+bandwidths <-500*2^(0:8)
+bandwidths<-lapply(seq_along(bandwidths),
+         function(i,length) {
+           if(i==1) return(bandwidths[i])
+           seq(bandwidths[i-1],
+               bandwidths[i],
+               length.out=length)
+         },
+  length=3)
+bandwidths<-unique(Reduce(c,bandwidths))
 
 bandwidth_env <- lapply(
   bandwidths,
@@ -183,7 +193,7 @@ First, convert a subset of the local environment outputs to an `sf` object for
 faceted mapping.
 
 ```{r bandwidth-map-data}
-map_bandwidths <- c(500, 2000, 5000, 10000)
+map_bandwidths <- c(500, 1000, 2000, 4000, 8000, 16000)
 map_index <- match(map_bandwidths, bandwidths)
 
 bandwidth_maps <- do.call(

@@ -104,11 +104,11 @@ env_a
 head(env_a@env)
 ```
 
-When `useExp = FALSE` and `power = 0`, all points receive equal weight. In that
-case every local environment equals the overall group means.
+With `weighting = "unweighted"` and no bandwidth, all points receive equal
+weight. In that case every local environment equals the overall group means.
 
 ```{r local-environment-equal-weight}
-env_equal <- localenv(coords, data = pattern_a, useExp = FALSE, power = 0)
+env_equal <- localenv(coords, data = pattern_a, weighting = "unweighted")
 
 head(env_equal@env)
 colMeans(pattern_a)
