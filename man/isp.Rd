@@ -39,20 +39,32 @@ grd_sf <- st_sf(geom)
 
 d <- rep(NA, 8) # index of dissimilarity
 p <- rep(NA, 8) # index of spatial proximity
-cols <- rep("white", 100)
 for (i in 1:8) {
   idx <- 2 * i
   d[i] <- dissim(data = segdata[,(idx-1):idx])$d
   p[i] <- isp(grd_sf, data = segdata[,(idx-1):idx])
-  full <- segdata[,(idx-1)] == 100
-  half <- segdata[,(idx-1)] == 50
-  cols <- rep("white", 100)
-  cols[full] <- "black"
-  if (any(half)) {
-    cols[half] <- "grey"
-  }
-  plot(grd_sf, col = cols)
-  text(5, 11.5, labels = 
-       paste("D = ", round(d[i], 2), ", P = ", round(p[i], 2), sep = ""))
+}
+
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  plot_data <- do.call(
+    rbind,
+    lapply(1:8, function(i) {
+      idx <- 2 * i - 1
+      data.frame(
+        pattern = paste0(
+          LETTERS[i], ": D = ", round(d[i], 2), ", P = ", round(p[i], 2)
+        ),
+        group_share = segdata[, idx],
+        geometry = st_geometry(grd_sf)
+      )
+    })
+  )
+  plot_data <- st_sf(plot_data)
+
+  ggplot2::ggplot(plot_data) +
+    ggplot2::geom_sf(ggplot2::aes(fill = group_share), color = "white") +
+    ggplot2::facet_wrap(~ pattern) +
+    ggplot2::scale_fill_viridis_c() +
+    ggplot2::theme_void()
 }
 }

@@ -37,21 +37,29 @@ Wong, D. W. S. (1993). Spatial Indices of Segregation. \emph{Urban Studies}, \bo
 }
 \examples{
 data(segdata)
-grd <- GridTopology(cellcentre.offset=c(0.5,0.5),
-                    cellsize=c(1,1), cells.dim=c(10,10))
-grd.sp <- as.SpatialPolygons.GridTopology(grd)
+geom <- st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,10), c(0,0)))) |>
+  st_make_grid(cellsize = 1)
+grd_sf <- st_sf(segdata, geometry = geom)
 
-pd <- par()
-par(mfrow = c(2, 4), mar = c(0, 1, 0, 1))
-for (i in 1:8) {
-  full <- segdata[,(2*i)-1] == 100
-  half <- segdata[,(2*i)-1] == 50
-  plot(grd.sp)
-  plot(grd.sp[full,], col = "Black", add = TRUE)
-  if (any(half))
-    plot(grd.sp[half,], col = "Grey", add = TRUE)
-  text(5, 11.5, labels = paste("Pattern", LETTERS[i]))
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  plot_data <- do.call(
+    rbind,
+    lapply(1:8, function(i) {
+      idx <- 2 * i - 1
+      data.frame(
+        pattern = LETTERS[i],
+        group_share = segdata[, idx],
+        geometry = st_geometry(grd_sf)
+      )
+    })
+  )
+  plot_data <- st_sf(plot_data)
+
+  ggplot2::ggplot(plot_data) +
+    ggplot2::geom_sf(ggplot2::aes(fill = group_share), color = "white") +
+    ggplot2::facet_wrap(~ pattern) +
+    ggplot2::scale_fill_viridis_c() +
+    ggplot2::theme_void()
 }
-par(mfrow = pd$mfrow, mar = pd$mar)
 }
 \keyword{datasets}

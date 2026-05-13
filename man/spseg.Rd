@@ -57,48 +57,27 @@ Reardon, S. F., Farrell, C. R., Matthews, S. A., O'Sullivan, D., Bischoff, K., a
 \code{\link{SegSpatial-class}}, \code{\link{localenv}}, \code{kernel2d}
 }
 \examples{
-\dontrun{
 # uses the idealised landscapes in 'segdata'
 data(segdata)
-grd <- GridTopology(cellcentre.offset=c(0.5,0.5),
-                    cellsize=c(1,1), cells.dim=c(10,10))
-grd.sp <- as.SpatialPolygons.GridTopology(grd)
+geom <- st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,10), c(0,0)))) |>
+  st_make_grid(cellsize = 1)
+grd_sf <- st_sf(geometry = geom)
 test.df <- segdata[,1:2]
 
-# no spatial smoothing
-xx1 <- spseg(grd.sp, data = test.df)
+# no spatial smoothing: compute local environments and spatial indices
+env <- localenv(grd_sf, data = test.df, maxdist = 2)
+xx1 <- spseg(env)
 print(xx1, digits = 3)
 
-# plots the values in the slot 'data'
-spplot(xx1, main = "No spatial smoothing")
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  env_sf <- cbind(grd_sf, as.data.frame(env@env))
+  ggplot2::ggplot(env_sf) +
+    ggplot2::geom_sf(ggplot2::aes(fill = A1), color = "white") +
+    ggplot2::scale_fill_viridis_c() +
+    ggplot2::theme_void()
+}
 
-# smoothes the data points
-xx2 <- spseg(grd.sp, data = test.df, smoothing = "equal")
-print(xx2, digits = 3)
-spplot(xx2, main = "Equal")
-
-# uses the kernel smoothing of the data points
-xx3 <- spseg(grd.sp, data = test.df, smoothing = "kernel", 
-             nrow = 20, ncol = 20)
-print(xx3, digits = 3)
-spplot(xx3, main = "Kernel")}
-
-\dontrun{
-# same as the above but with a boundary polygon
-w <- matrix(c(1.5, 1.5,
-              1.5, 8.5,
-              8.5, 8.5,
-              8.5, 4.5,
-              5.5, 4.5,
-              5.5, 1.5), ncol = 2, byrow = TRUE)
-xx4 <- spseg(grd.sp, data = segdata[,1:2], smoothing = "kernel", 
-             window = w, nrow = 20, ncol = 20)
-print(xx4, digits = 3)
-spplot(xx4, main = "Kernel with a boundary polygon")
-
-# retrieves the index values
-as.list(xx4)
-
-# shows the values in the slot 'env'
-spplot(as(xx4, "SegLocal"), main = "Local population composition")}
+# selected measures can be requested by name
+xx2 <- spseg(env, method = c("information", "dissimilarity"))
+as.list(xx2)
 }

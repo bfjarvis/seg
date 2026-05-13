@@ -64,11 +64,14 @@ slot(v, "d") <- runif(1)
 # retrieves the index values
 as.list(v)
 
-# displays the values in the slot 'data'
-# spplot(v, col.regions = heat.colors(20))
-
-# displays the values in the slot 'env'
-# w <- as(v, "SegLocal")
-# spplot(w, col.regions = heat.colors(20))
+# displays the values in the slot 'env' using sf and ggplot2
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  v_sf <- st_as_sf(data.frame(v@env, x = v@coords[,1], y = v@coords[,2]),
+                   coords = c("x", "y"), crs = st_crs(v@proj4string))
+  ggplot2::ggplot(v_sf) +
+    ggplot2::geom_sf(ggplot2::aes(color = D), size = 2) +
+    ggplot2::scale_color_viridis_c() +
+    ggplot2::theme_minimal()
+}
 }
 \keyword{classes}

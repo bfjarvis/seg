@@ -62,15 +62,13 @@ summary(v)
 v <- update(v, proj4string = st_crs("+proj=nzmg +datum=nzgd49"))
 summary(v)
 
-# displays the (randomly-generated) local population data
-# par(mfrow = c(1, 3))
-# plot(v, main = paste("Data", colnames(pop)), xlab = "x", ylab = "y")
-# par(mfrow = c(1, 1))
-
-# coverts the object to class 'Spatial'
-# plot(as(v, "sf"))
-# spplot(v, col.regions = heat.colors(20))
-# v.sp <- as(v, "SpatialPixelsDataFrame")
-# is(v.sp)
+# converts the object to sf and plots a local population column
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  v_sf <- as(v, "sf")
+  ggplot2::ggplot(v_sf) +
+    ggplot2::geom_sf(ggplot2::aes(color = A), size = 2) +
+    ggplot2::scale_color_viridis_c() +
+    ggplot2::theme_minimal()
+}
 }
 \keyword{classes}

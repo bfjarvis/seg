@@ -79,15 +79,23 @@ print(xx2)
 xx3 <- localenv(coords, data = segdata[,1:2], weighting = "unweighted")
 print(xx3)
 
-\dontrun{
 # checkerboard pattern:
 # biweight kernel with different p values
 vv1 <- localenv(coords, data = segdata[,5:6], weighting = "biweight", power = 1)
-spplot(vv1, main = "Biweight with p = 1")
-
 vv2 <- localenv(coords, data = segdata[,5:6], weighting = "biweight", power = 2)
-spplot(vv2, main = "Biweight with p = 2")
-
 vv3 <- localenv(coords, data = segdata[,5:6], weighting = "biweight", power = 3)
-spplot(vv3, main = "Biweight with p = 3")}
+
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  plot_data <- rbind(
+    transform(as(vv1, "sf"), power = "p = 1"),
+    transform(as(vv2, "sf"), power = "p = 2"),
+    transform(as(vv3, "sf"), power = "p = 3")
+  )
+
+  ggplot2::ggplot(plot_data) +
+    ggplot2::geom_sf(ggplot2::aes(color = C1), size = 2) +
+    ggplot2::facet_wrap(~ power) +
+    ggplot2::scale_color_viridis_c() +
+    ggplot2::theme_minimal()
+}
 }
