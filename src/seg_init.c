@@ -10,10 +10,14 @@
   /* .Call calls */
 extern SEXP envconstruct(SEXP x, SEXP y, SEXP v, SEXP dim, SEXP p,
                          SEXP weighting, SEXP normalise, SEXP d);
+extern SEXP seg_engine(SEXP x, SEXP y, SEXP v, SEXP dim, SEXP bands, SEXP p,
+                       SEXP weighting, SEXP normalize, SEXP measures,
+                       SEXP keep_env, SEXP keep_indices);
 extern SEXP spsegIDX(SEXP Rx, SEXP Ry, SEXP Rm, SEXP Ridx);
 
 static const R_CallMethodDef CallEntries[] = {
   {"envconstruct", (DL_FUNC) &envconstruct, 8},
+  {"seg_engine",   (DL_FUNC) &seg_engine,   11},
   {"spsegIDX",     (DL_FUNC) &spsegIDX,     4},
   {NULL, NULL, 0}
 };

@@ -24,6 +24,8 @@ localenv(x, data, power = 3,
 \details{
 At each data point in \sQuote{x}, \code{localenv} calculates the weighted average of the populations of all points that are within a search radius \sQuote{maxdist}. The output from this function is an essential component to compute the spatial segregation measures.
 
+If \sQuote{maxdist} is zero, no spatial weighting is applied: each local environment is set equal to the observed population values for the focal unit. This is useful when indices are desired without spatially weighted local environments.
+
 The \sQuote{weighting} argument controls how neighbours within the bandwidth are weighted. The \dQuote{unweighted} option gives each neighbour equal weight. The \dQuote{biweight} option uses
 
 \deqn{w(d) = (1 - (d / bw)^p)^p}{%

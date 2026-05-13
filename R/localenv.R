@@ -30,6 +30,11 @@ localenv <- function(x, data, power = 3,
     stop("'maxdist' must be numeric", call. = FALSE)
   else if (maxdist < 0)
     stop("'maxdist' must be greater than or equal to 0", call. = FALSE)
+
+  if (!maxdist_missing && maxdist == 0) {
+    message("localenv maxdist is 0; using observed data as local environments")
+    return(SegLocal(coords, data, data, st_crs(proj4string)))
+  }
   
   if (missing(sprel)) {
     relation <- coords

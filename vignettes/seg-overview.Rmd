@@ -134,13 +134,13 @@ spatial_a_2 <- spseg(coords, data = pattern_a, maxdist = 2)
 as.list(spatial_a_2)
 ```
 
-You can request a subset of measures with `method`.
+You can request a subset of measures with `measures`.
 
-```{r selected-methods}
+```{r selected-measures}
 selected <- spseg(
   coords,
   data = pattern_a,
-  method = c("information", "dissimilarity"),
+  measures = c("information", "dissimilarity"),
   maxdist = 2
 )
 
@@ -184,9 +184,7 @@ population values over a regular grid.
 spseg(
   grid_sf,
   data = pattern_a,
-  smoothing = "equal",
-  nrow = 10,
-  ncol = 10,
+  smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
   maxdist = 2
 ) |>
   as.list()
@@ -207,11 +205,13 @@ window <- matrix(
 spseg(
   coords,
   data = pattern_a,
-  smoothing = "kernel",
-  nrow = 10,
-  ncol = 10,
-  window = window,
-  sigma = 1,
+  smoothing = list(
+    smoothing = "kernel",
+    nrow = 10,
+    ncol = 10,
+    window = window,
+    sigma = 1
+  ),
   maxdist = 2
 ) |>
   as.list()

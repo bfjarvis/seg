@@ -31,6 +31,47 @@
   exp(mean(log(d)))
 }
 
+default_bands <- function(x, data = NULL, n = 500,
+                          probs = seq(0.1, 0.9, 0.1),
+                          weighted = TRUE) {
+  tmp <- suppressMessages(chksegdata(x, data))
+  coords <- tmp$coords
+  data <- tmp$data
+  n_points <- nrow(coords)
+  sample_n <- min(n_points, n)
+
+  weights <- NULL
+  if (weighted) {
+    weights <- rowSums(data)
+    weights[!is.finite(weights) | weights < 0] <- 0
+    if (sum(weights) <= 0)
+      weights <- NULL
+  }
+
+  if (n_points > sample_n) {
+    has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    if (has_seed)
+      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    set.seed(1)
+    on.exit({
+      if (has_seed)
+        assign(".Random.seed", old_seed, envir = .GlobalEnv)
+      else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
+        rm(".Random.seed", envir = .GlobalEnv)
+    }, add = TRUE)
+    coords <- coords[sample.int(n_points, sample_n, prob = weights), ,
+                     drop = FALSE]
+  }
+
+  d <- as.numeric(dist(coords))
+  d <- d[d > 0]
+  if (length(d) == 0)
+    stop("failed to calculate default bands from the input coordinates",
+         call. = FALSE)
+
+  as.numeric(quantile(d, probs = probs, names = FALSE, type = 8))
+}
+
 .restore_env_dimnames <- function(env, data) {
   colnames(env) <- colnames(data)
   rownames(env) <- rownames(data)
@@ -70,14 +111,40 @@ localenv_coords <- function(coords, data, power, weighting, normalize, maxdist) 
   if (nrow(coords) != nrow(data))
     stop("'data' must have the same number of rows as 'coords'", call. = FALSE)
 
+  seg_engine_coords(
+    coords = coords, data = data, bands = maxdist, power = power,
+    weighting = weighting, normalize = normalize, measures = character(),
+    keep_env = TRUE, keep_indices = FALSE
+  )$env[[1]]
+}
+
+seg_engine_coords <- function(coords, data, bands, power, weighting, normalize,
+                              measures, keep_env, keep_indices) {
+  if (nrow(coords) != nrow(data))
+    stop("'data' must have the same number of rows as 'coords'", call. = FALSE)
+
   xval <- coords[, 1]
   yval <- coords[, 2]
   dim <- ncol(data)
-  env <- .Call("envconstruct", xval, yval, as.vector(data), as.integer(dim),
-               power, as.integer(.localenv_weighting_id(weighting)),
-               as.integer(normalize), maxdist)
+  measures <- if (keep_indices) spseg_measures(measures) else character()
+  measure_flags <- c("exposure" %in% measures, "information" %in% measures,
+                     "diversity" %in% measures, "dissimilarity" %in% measures)
+  out <- .Call("seg_engine", xval, yval, as.vector(data), as.integer(dim),
+               bands, power, as.integer(.localenv_weighting_id(weighting)),
+               as.integer(normalize), as.integer(measure_flags),
+               as.integer(keep_env), as.integer(keep_indices))
 
-  .restore_env_dimnames(env, data)
+  if (!is.null(out$env)) {
+    out$env <- lapply(out$env, .restore_env_dimnames, data = data)
+  }
+  if (!is.null(out$indices$p)) {
+    out$indices$p <- lapply(out$indices$p, function(p) {
+      rownames(p) <- colnames(p) <- colnames(data)
+      p
+    })
+  }
+
+  out
 }
 
 localenv_dist <- function(sprel, data, power, weighting, normalize, maxdist) {

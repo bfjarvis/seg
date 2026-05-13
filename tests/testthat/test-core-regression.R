@@ -50,6 +50,16 @@ test_that("default localenv is invariant to coordinate units", {
   expect_equal(env_km@env, env_m@env, tolerance = 1e-12)
 })
 
+test_that("maxdist zero uses observed data as local environments", {
+  toy <- toy_grid()
+
+  env <- localenv(toy$coords, toy$values, maxdist = 0)
+  seg <- spseg(toy$coords, toy$values, maxdist = 0)
+
+  expect_equal(env@env, toy$values)
+  expect_equal(seg@env, toy$values)
+})
+
 test_that("localenv weighting schemes match between coordinate and dist paths", {
   coords <- cbind(x = c(0, 1, 3), y = 0)
   values <- matrix(c(10, 0,
@@ -108,19 +118,19 @@ test_that("localenv and spseg vary across bandwidths", {
   expect_false(isTRUE(all.equal(seg_small$d, seg_large$d)))
 })
 
-test_that("spseg selected methods match all-method C results", {
+test_that("spseg selected measures match all-measure C results", {
   toy <- toy_grid()
   env <- localenv(toy$coords, toy$values, maxdist = 2)
 
-  all_methods <- as.list(spseg(env, useC = TRUE))
-  expect_equal(as.list(spseg(env, method = "exposure", useC = TRUE))$p,
-               all_methods$p, tolerance = 1e-12)
-  expect_equal(as.list(spseg(env, method = "information", useC = TRUE))$h,
-               all_methods$h, tolerance = 1e-12)
-  expect_equal(as.list(spseg(env, method = "diversity", useC = TRUE))$r,
-               all_methods$r, tolerance = 1e-12)
-  expect_equal(as.list(spseg(env, method = "dissimilarity", useC = TRUE))$d,
-               all_methods$d, tolerance = 1e-12)
+  all_measures <- as.list(spseg(env, useC = TRUE))
+  expect_equal(as.list(spseg(env, measures = "exposure", useC = TRUE))$p,
+               all_measures$p, tolerance = 1e-12)
+  expect_equal(as.list(spseg(env, measures = "information", useC = TRUE))$h,
+               all_measures$h, tolerance = 1e-12)
+  expect_equal(as.list(spseg(env, measures = "diversity", useC = TRUE))$r,
+               all_measures$r, tolerance = 1e-12)
+  expect_equal(as.list(spseg(env, measures = "dissimilarity", useC = TRUE))$d,
+               all_measures$d, tolerance = 1e-12)
 })
 
 test_that("spseg handles zero entropy terms without tolerance adjustment", {
@@ -133,8 +143,8 @@ test_that("spseg handles zero entropy terms without tolerance adjustment", {
   colnames(values) <- c("a", "b")
   env <- SegLocal(coords, values, values)
 
-  c_result <- as.list(spseg(env, method = "information", useC = TRUE))
-  r_result <- as.list(spseg(env, method = "information", useC = FALSE))
+  c_result <- as.list(spseg(env, measures = "information", useC = TRUE))
+  r_result <- as.list(spseg(env, measures = "information", useC = FALSE))
 
   expect_true(is.finite(c_result$h))
   expect_equal(c_result$h, r_result$h, tolerance = 1e-12)
@@ -151,12 +161,25 @@ test_that("spseg ignores deprecated tolerance argument", {
   env <- SegLocal(coords, values, values)
 
   expect_message(
-    with_tol <- spseg(env, method = "information", tol = 1e-3),
+    with_tol <- spseg(env, measures = "information", tol = 1e-3),
     "ignored"
   )
-  without_tol <- spseg(env, method = "information")
+  without_tol <- spseg(env, measures = "information")
 
   expect_equal(as.list(with_tol)$h, as.list(without_tol)$h)
+})
+
+test_that("spseg accommodates deprecated method argument", {
+  toy <- toy_grid()
+  env <- localenv(toy$coords, toy$values, maxdist = 2)
+
+  expect_warning(
+    old <- spseg(env, method = "information", useC = TRUE),
+    "deprecated"
+  )
+  new <- spseg(env, measures = "information", useC = TRUE)
+
+  expect_equal(as.list(old)$h, as.list(new)$h, tolerance = 1e-12)
 })
 
 test_that("spatseg remains as a deprecated compatibility wrapper", {
@@ -168,7 +191,7 @@ test_that("spatseg remains as a deprecated compatibility wrapper", {
     "deprecated"
   )
   expect_equal(as.list(result)$d,
-               as.list(spseg(env, method = "dissimilarity", useC = TRUE))$d,
+               as.list(spseg(env, measures = "dissimilarity", useC = TRUE))$d,
                tolerance = 1e-12)
 })
 
@@ -176,13 +199,115 @@ test_that("spseg wrapper returns selected measures only", {
   toy <- toy_grid()
 
   result <- spseg(toy$coords, toy$values,
-                  method = c("information", "dissimilarity"), maxdist = 2)
+                  measures = c("information", "dissimilarity"), maxdist = 2)
 
   expect_s4_class(result, "SegSpatial")
   expect_length(result@h, 1L)
   expect_length(result@d, 1L)
   expect_length(result@r, 0L)
   expect_equal(dim(result@p), c(0L, 0L))
+})
+
+test_that("spseg argument order keeps outputs before local environment settings", {
+  expect_equal(
+    names(formals(spseg))[1:9],
+    c("x", "data", "measures", "sprel", "maxdist", "bands", "weighting",
+      "power", "normalize")
+  )
+})
+
+test_that("spseg exposes and syncs localenv weighting arguments", {
+  toy <- toy_grid()
+  env <- localenv(toy$coords, toy$values, maxdist = 2, weighting = "inverse",
+                  power = 2, normalize = FALSE)
+  wrapped <- spseg(toy$coords, toy$values, maxdist = 2,
+                   weighting = "inverse", power = 2, normalize = FALSE)
+
+  expect_equal(wrapped@env, env@env, tolerance = 1e-12)
+})
+
+test_that("spseg unified result can store local environments and indices", {
+  toy <- toy_grid()
+  result <- spseg(toy$coords, toy$values, bands = c(1, 2),
+                  output = "full")
+  env2 <- localenv(toy$coords, toy$values, maxdist = 2)
+  legacy2 <- as.list(spseg(env2))
+
+  expect_s4_class(result, "SegResult")
+  expect_equal(result@bands, c(1, 2))
+  expect_length(result@env, 2L)
+  expect_equal(result@env[[2]], env2@env, tolerance = 1e-12)
+  expect_equal(result@indices$d[["2"]], legacy2$d, tolerance = 1e-12)
+  expect_equal(result@indices$r[["2"]], legacy2$r, tolerance = 1e-12)
+  expect_equal(result@indices$h[["2"]], legacy2$h, tolerance = 1e-12)
+  expect_equal(result@indices$p[["2"]], legacy2$p, tolerance = 1e-12)
+})
+
+test_that("spseg indices output avoids storing inputs and environments", {
+  toy <- toy_grid()
+  result <- spseg(toy$coords, toy$values, bands = c(1, 2),
+                  output = "indices",
+                  measures = c("information", "dissimilarity"))
+
+  expect_s4_class(result, "SegResult")
+  expect_null(result@coords)
+  expect_null(result@data)
+  expect_null(result@env)
+  expect_length(result@indices$h, 2L)
+  expect_length(result@indices$d, 2L)
+  expect_length(result@indices$r, 0L)
+  expect_length(result@indices$p, 0L)
+  expect_equal(
+    as.data.frame(result)$measure,
+    rep(c("d", "h"), each = 2)
+  )
+})
+
+test_that("default bands use sampled distance quantiles", {
+  toy <- toy_grid()
+  bands <- default_bands(toy$coords, toy$values, n = 10)
+
+  expect_type(bands, "double")
+  expect_length(bands, 9L)
+  expect_true(all(bands > 0))
+  expect_equal(bands, default_bands(toy$coords, toy$values, n = 10))
+})
+
+test_that("spseg accepts smoothing as a named list", {
+  data(segdata)
+  geom <- sf::st_polygon(list(rbind(c(0, 0), c(10, 0), c(10, 10),
+                                    c(0, 10), c(0, 0)))) |>
+    sf::st_make_grid(cellsize = 1)
+  grid_sf <- sf::st_sf(geometry = geom)
+
+  result <- spseg(
+    grid_sf,
+    data = segdata[, 1:2],
+    smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+    maxdist = 2
+  )
+
+  expect_s4_class(result, "SegSpatial")
+  expect_equal(nrow(result@env), nrow(result@coords))
+})
+
+test_that("spseg accommodates deprecated top-level smoothing arguments", {
+  data(segdata)
+  geom <- sf::st_polygon(list(rbind(c(0, 0), c(10, 0), c(10, 10),
+                                    c(0, 10), c(0, 0)))) |>
+    sf::st_make_grid(cellsize = 1)
+  grid_sf <- sf::st_sf(geometry = geom)
+
+  expect_warning(
+    old <- spseg(grid_sf, data = segdata[, 1:2], smoothing = "equal",
+                 nrow = 10, ncol = 10, maxdist = 2),
+    "Deprecated smoothing"
+  )
+  new <- spseg(grid_sf, data = segdata[, 1:2],
+               smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+               maxdist = 2)
+
+  expect_equal(old@env, new@env, tolerance = 1e-12)
 })
 
 test_that("SegLocal objects support spplot examples", {

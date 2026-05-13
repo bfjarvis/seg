@@ -6,8 +6,12 @@
 Calculates the set of spatial segregation measures developed by Reardon and O'Sullivan (2004).
 }
 \usage{
-spseg(x, data, method = "all", smoothing = "none", nrow = 100, ncol = 100, 
-      window, sigma, useC = TRUE, negative.rm = FALSE, 
+spseg(x, data, measures = "all", sprel = NULL, maxdist = NULL,
+      bands = NULL,
+      weighting = c("biweight", "unweighted", "inverse", "exponential"),
+      power = 3, normalize = TRUE, smoothing = NULL,
+      output = c("legacy", "full", "indices", "localenv"),
+      useC = TRUE, negative.rm = FALSE, 
       verbose = FALSE, \dots)
 spatseg(env, method = "all", useC = TRUE, negative.rm = FALSE, \dots)
 }
@@ -15,28 +19,38 @@ spatseg(env, method = "all", useC = TRUE, negative.rm = FALSE, \dots)
   \item{x}{an object of \code{\link{SegLocal-class}}, a numeric matrix or data frame with coordinates (each row is a point), or an object of class \code{Spatial} or \code{ppp}.}
   \item{env}{an object of \code{\link{SegLocal-class}}.}
   \item{data}{an object of class \code{matrix}, or one that can be coerced to that class. The number of rows in \sQuote{data} should equal the number of points in \sQuote{x}, and the number of columns should be greater than one (i.e., at least two population groups are required). This can be missing if \sQuote{x} has a data frame attached to it.}
-  \item{method}{a vector of character strings indicating an measure or measures to be computed. This must be one or more of the strings \dQuote{all} (default), \dQuote{exposure}, \dQuote{information}, \dQuote{diversity}, and \dQuote{dissimilarity}. Abbreviations are accepted, as long as it is clear which method is meant.}
-  \item{smoothing}{a character string indicating how to perform spatial smoothing of the population data. This must be (an abbreviation of) one of the strings \dQuote{none} (default), \dQuote{kernel}, or \dQuote{equal}.}
-  \item{nrow}{a numeric value indicating the number of row cells in the rasterised data surface. Ignored if \sQuote{smoothing} is \dQuote{none}.}
-  \item{ncol}{a numeric value indicating the number of column cells.}
-  \item{window}{an optional object of class \code{matrix} to be passed to \code{kernel2d}. See \sQuote{Details} in \code{\link{deseg}}.}
-  \item{sigma}{an optional numeric value specifying the kernel bandwidth to be passed to \code{kernel2d}. See also \sQuote{Details} in \code{\link{deseg}}.}
+  \item{measures}{a vector of character strings indicating the measure or measures to be computed. This must be one or more of the strings \dQuote{all} (default), \dQuote{exposure}, \dQuote{information}, \dQuote{diversity}, and \dQuote{dissimilarity}. Abbreviations are accepted, as long as it is clear which measure is meant.}
+  \item{method}{deprecated synonym for \code{measures}, retained for compatibility in \code{spatseg} and accepted through \dots in \code{spseg}.}
+  \item{sprel}{an optional object of class \code{dist} or \code{nb} passed to \code{\link{localenv}}.}
+  \item{maxdist}{an optional numeric value passed to \code{\link{localenv}} specifying the bandwidth/search radius for local environments. If zero, no spatial weighting is applied and the observed data are used as local environments.}
+  \item{bands}{an optional numeric vector of bandwidths/search radii. This is a clearer synonym for supplying multiple values through \code{maxdist}. If both \code{bands} and \code{maxdist} are NULL and \code{output} is not \dQuote{legacy}, default bands are computed by \code{\link{default_bands}}.}
+  \item{weighting}{a character string passed to \code{\link{localenv}} indicating the spatial weighting scheme. One of \dQuote{biweight} (default), \dQuote{unweighted}, \dQuote{inverse}, or \dQuote{exponential}.}
+  \item{power}{a numeric value passed to \code{\link{localenv}} that determines the change rate of the biweight and inverse distance weighting functions. The default is 3.}
+  \item{normalize}{logical. If TRUE, distances are divided by the bandwidth before local environment weights are calculated. The default is TRUE.}
+  \item{smoothing}{an optional named list controlling population smoothing before local environments are constructed. If NULL, smoothing is not used. See \sQuote{Details}.}
+  \item{output}{a character string controlling the returned object. \dQuote{legacy} preserves the previous scalar-band \code{\link{SegSpatial-class}} return when possible. \dQuote{full} returns a \code{\link{SegResult-class}} with both local environments and indices. \dQuote{indices} returns only segregation indices and does not store coordinates, input data, or local environments. \dQuote{localenv} stores local environments but does not calculate indices.}
   \item{useC}{logical. If TRUE, calculate the segregation values in C.}
   \item{negative.rm}{logical. If TRUE, all geographic units where at least one group (i.e., column) has a negative population will be removed. If FALSE, negative values will be replaced with zero.}
   \item{verbose}{logical. If TRUE, print the current stage of the computation and time spent on each job to the screen.}
-  \item{\dots}{optional arguments to be passed to \code{\link{localenv}} to compute the population composition of each local environment. The deprecated argument \code{tol} is accepted for compatibility and ignored.}
+  \item{\dots}{additional arguments passed to \code{\link{localenv}} when \sQuote{x} is raw spatial data. Deprecated top-level smoothing arguments \code{nrow}, \code{ncol}, \code{nocol}, \code{window}, and \code{sigma} are accepted for compatibility with a warning and folded into \sQuote{smoothing}. The deprecated arguments \code{method} and \code{tol} are accepted for compatibility; \code{method} is used as \code{measures} when \code{measures} is not supplied, and \code{tol} is ignored.}
 }
 \details{
-\code{spseg} computes the set of spatial segregation measures proposed by Reardon and O'Sullivan. It can be called directly on a \code{\link{SegLocal-class}} object, or on spatial data from which \code{spseg} first constructs local environments.
+\code{spseg} computes the set of spatial segregation measures proposed by Reardon and O'Sullivan. It can be called directly on a \code{\link{SegLocal-class}} object, or on raw spatial data from which \code{spseg} first constructs local environments.
 
 \code{spatseg} is deprecated and retained as a compatibility wrapper for existing code. New code should call \code{spseg} instead.
 
-When \code{spseg} is called on raw spatial data, the population density surface is constructed by assuming that the population density is uniform in each census tract, or by using \code{kernel2d} in the package \pkg{splancs}. In the previous version (< 0.4.1), the function \code{rasterize} in \pkg{raster} was used in the case of the former, and \code{density.ppp} in \pkg{spatstat} for the latter.
+Local environment construction is the main spatial modelling step. When \code{spseg} is called on raw spatial data, it first constructs local environments. By default, \code{spseg} uses normalized biweight local environments with \code{power = 3}, matching the defaults in \code{\link{localenv}}. The most important local environment choices are \code{maxdist} or \code{bands} (the bandwidth/search radius), \code{weighting}, \code{power}, and \code{normalize}. See \code{\link{localenv}} for details on how these choices define local population composition.
+
+Supplying multiple \code{bands}, or setting \code{output} to anything other than \dQuote{legacy}, returns a \code{\link{SegResult-class}} object. In these cases, local environments and segregation indices are produced by a unified C engine. If \code{output = "indices"}, local environments are used only transiently inside the calculation and are not stored in the result.
+
+Set \code{maxdist = 0} to compute indices without spatially weighted local environments. In this case, each local environment is a copy of the observed data for the focal unit.
+
+Population smoothing before local environment construction is also possible through the \sQuote{smoothing} argument, but this is a secondary option. If supplied, \sQuote{smoothing} should be a named list with entries corresponding to the older smoothing arguments, such as \code{smoothing = list(smoothing = "equal", nrow = 100, ncol = 100)} or \code{smoothing = list(smoothing = "kernel", nrow = 100, ncol = 100, window = window, sigma = sigma)}. Consult \code{\link{localenv}} first when choosing the spatial scale and weighting scheme for the local environment calculation.
 
 When computing the spatial information theory index, zero proportions are evaluated using the limiting value \eqn{x \log(x) = 0} as \eqn{x} approaches zero. This avoids artificial perturbation of the data and prevents \code{0 * log(0)} from producing \code{NaN}.
 }
 \value{
-An object of \code{\link{SegSpatial-class}}.
+An object of \code{\link{SegSpatial-class}} for legacy scalar-band calls, otherwise an object of \code{\link{SegResult-class}}.
 }
 \note{
 For entropy calculations, terms of the form \eqn{x \log(x)} are evaluated as zero when \eqn{x = 0}, following the limiting value as \eqn{x} approaches zero. The deprecated \code{tol} argument is therefore ignored when supplied.
@@ -64,7 +78,7 @@ geom <- st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,10), c(0,0)))) |>
 grd_sf <- st_sf(geometry = geom)
 test.df <- segdata[,1:2]
 
-# no spatial smoothing: compute local environments and spatial indices
+# explicit workflow: compute local environments, then spatial indices
 env <- localenv(grd_sf, data = test.df, maxdist = 2)
 xx1 <- spseg(env)
 print(xx1, digits = 3)
@@ -78,6 +92,38 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
 }
 
 # selected measures can be requested by name
-xx2 <- spseg(env, method = c("information", "dissimilarity"))
+xx2 <- spseg(env, measures = c("information", "dissimilarity"))
 as.list(xx2)
+
+# one-call workflow using a data frame of coordinates
+coords_df <- data.frame(x = rep(seq(0.5, 9.5), each = 10),
+                        y = rep(seq(0.5, 9.5), times = 10))
+xx3 <- spseg(
+  coords_df,
+  data = test.df,
+  measures = c("information", "dissimilarity"),
+  maxdist = 2,
+  weighting = "biweight",
+  power = 3,
+  normalize = TRUE
+)
+as.list(xx3)
+
+# optional smoothing is supplied as a named list
+xx4 <- spseg(
+  grd_sf,
+  data = test.df,
+  smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+  maxdist = 2
+)
+as.list(xx4)
+
+# multiple bandwidths return a SegResult
+xx5 <- spseg(
+  coords_df,
+  data = test.df,
+  bands = c(1, 2, 3),
+  output = "indices"
+)
+as.data.frame(xx5)
 }
