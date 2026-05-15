@@ -98,6 +98,8 @@ std::vector<GroupPair> make_pairs(const arma::vec& T_m)
   return pairs;
 }
 
+// Nomenclature follows Reardon and O'Sullivan (2004)
+// P: exposure/isolation
 void accumulate_P_overall(arma::cube& P_acc, int b, int i,
                           const arma::mat& N,
                           const arma::vec& T_m,
@@ -106,18 +108,21 @@ void accumulate_P_overall(arma::cube& P_acc, int b, int i,
   P_acc.slice(b) += (N.row(i).t() / T_m) * p_m.t();
 }
 
+// H: information theory
 void accumulate_H_overall(arma::vec& H_acc, int b, double T_i,
                           const arma::vec& p_m, double logM)
 {
   H_acc[b] += T_i * entropy(p_m, logM);
 }
 
+// R: relative diversity
 void accumulate_R_overall(arma::vec& R_acc, int b, double T_i,
                           const arma::vec& p_m)
 {
   R_acc[b] += T_i * interaction(p_m);
 }
 
+// D: dissimilarity
 void accumulate_D_overall(arma::vec& D_acc, int b, double T_i,
                           const arma::vec& p_m,
                           const arma::vec& P_m,
@@ -220,37 +225,40 @@ extern "C" SEXP seg_engine(SEXP x, SEXP y, SEXP data, SEXP bands, SEXP power,
                            SEXP keep_indices)
 {
   BEGIN_RCPP
+  // Input coordinates and Armadillo views of them
+  NumericVector X_input(x); 
+  NumericVector Y_input(y);
+  const arma::vec X(X_input.begin(), X_input.size(), false);
+  const arma::vec Y(Y_input.begin(), Y_input.size(), false);
+  // Input counts (n by M) and Armadillo views
+  NumericMatrix N_input(data);         
+  arma::mat N(N_input.begin(), N_input.nrow(), N_input.ncol(), false); 
+  NumericVector BW(bands);             // bandwidth/search-radius values
+  IntegerVector measure_flags(measures); // exposure, information, diversity, dissimilarity
+  IntegerVector comparison_flags(comparison); // overall and pairwise switches
 
-  NumericVector X(x);
-  NumericVector Y(y);
-  NumericMatrix N_input(data);
-  arma::mat N(N_input.begin(), N_input.nrow(), N_input.ncol(), false);
-  NumericVector BW(bands);
-  IntegerVector measure_flags(measures);
-  IntegerVector comparison_flags(comparison);
+  const int n = X.size();              // number of focal units
+  const int M = N.n_cols;              // number of groups
+  const int B = BW.size();             // number of bandwidths
+  const double weight_power = as<double>(power); // kernel power parameter
+  const int weighting_id = as<int>(weighting); // kernel identifier from R
+  const bool normalized = as<int>(normalize) == 1; // scale distances by bandwidth
+  const bool calculate_overall = comparison_flags[0] == 1; // compute overall indices
+  const bool calculate_pairwise = comparison_flags[1] == 1; // compute pairwise indices
+  const bool store_env = as<int>(keep_env) == 1; // return local environments
+  const bool store_indices = as<int>(keep_indices) == 1; // return segregation indices
 
-  const int n = X.size();
-  const int M = N.n_cols;
-  const int B = BW.size();
-  const double weight_power = as<double>(power);
-  const int weighting_id = as<int>(weighting);
-  const bool normalized = as<int>(normalize) == 1;
-  const bool calculate_overall = comparison_flags[0] == 1;
-  const bool calculate_pairwise = comparison_flags[1] == 1;
-  const bool store_env = as<int>(keep_env) == 1;
-  const bool store_indices = as<int>(keep_indices) == 1;
-
-  arma::vec d_j(n);
-  arma::vec L_m(M);
-  arma::vec p_m(M);
-  arma::vec T_i = arma::sum(N, 1);
-  arma::vec T_m = arma::trans(arma::sum(N, 0));
-  const double T = arma::accu(T_i);
-  arma::vec P_m = T_m / T;
-  arma::vec D_acc(B, arma::fill::zeros);
-  arma::vec R_acc(B, arma::fill::zeros);
-  arma::vec H_acc(B, arma::fill::zeros);
-  arma::cube P_acc(M, M, B, arma::fill::zeros);
+  arma::vec d_j(n);                    // distances from focal unit i to all j
+  arma::vec L_m(M);                    // local environment counts by group
+  arma::vec p_m(M);                    // local environment proportions by group
+  arma::vec T_i = arma::sum(N, 1);     // total observed population by unit
+  arma::vec T_m = arma::trans(arma::sum(N, 0)); // total observed population by group
+  const double T = arma::accu(T_i);    // total observed population
+  arma::vec P_m = T_m / T;             // regional group proportions
+  arma::vec D_acc(B, arma::fill::zeros); // dissimilarity accumulator by band
+  arma::vec R_acc(B, arma::fill::zeros); // relative diversity accumulator by band
+  arma::vec H_acc(B, arma::fill::zeros); // information theory accumulator by band
+  arma::cube P_acc(M, M, B, arma::fill::zeros); // exposure/isolation accumulator by band
 
   double max_bw = BW[0];
   for (int b = 1; b < B; ++b)

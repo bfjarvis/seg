@@ -392,6 +392,93 @@ test_that("SegLocal objects support spplot examples", {
   expect_s3_class(spplot(env, main = "Biweight with p = 1"), "trellis")
 })
 
+test_that("SegLocal sf coercion preserves source geometry when available", {
+  geom <- sf::st_make_grid(
+    sf::st_as_sfc(sf::st_bbox(c(xmin = 0, ymin = 0, xmax = 2, ymax = 2))),
+    n = c(2, 2)
+  )
+  values <- matrix(c(10, 0,
+                     0, 10,
+                     5, 5,
+                     3, 7),
+                   ncol = 2, byrow = TRUE,
+                   dimnames = list(NULL, c("a", "b")))
+  x <- sf::st_sf(a = values[, 1], b = values[, 2], geometry = geom)
+
+  env_poly <- localenv(x, maxdist = 0)
+  env_poly_sf <- as(env_poly, "sf")
+  env_point <- localenv(sf::st_coordinates(sf::st_centroid(geom)), values,
+                        maxdist = 0)
+  env_point_sf <- as(env_point, "sf")
+
+  expect_s3_class(env_poly_sf, "sf")
+  expect_equal(as.character(unique(sf::st_geometry_type(env_poly_sf))),
+               "POLYGON")
+  expect_equal(nrow(env_poly_sf), nrow(x))
+  expect_equal(sf::st_crs(env_poly_sf), sf::st_crs(x))
+  expect_s3_class(env_point_sf, "sf")
+  expect_equal(as.character(unique(sf::st_geometry_type(env_point_sf))),
+               "POINT")
+})
+
+test_that("as.data.frame returns centroid coordinates and local environments", {
+  toy <- toy_grid(cols = 5:6)
+  env <- localenv(toy$coords, toy$values, maxdist = 0)
+  env_df <- as.data.frame(env)
+
+  expect_equal(names(env_df), c("x", "y", colnames(toy$values)))
+  expect_equal(nrow(env_df), nrow(toy$coords))
+  expect_equal(as.matrix(env_df[, c("x", "y")]), toy$coords,
+               ignore_attr = TRUE)
+  expect_equal(as.matrix(env_df[, colnames(toy$values)]), toy$values,
+               ignore_attr = TRUE)
+})
+
+test_that("st_as_sf compiles selected SegResult local environments", {
+  geom <- sf::st_make_grid(
+    sf::st_as_sfc(sf::st_bbox(c(xmin = 0, ymin = 0, xmax = 2, ymax = 2))),
+    n = c(2, 2)
+  )
+  values <- matrix(c(10, 0,
+                     0, 10,
+                     5, 5,
+                     3, 7),
+                   ncol = 2, byrow = TRUE,
+                   dimnames = list(NULL, c("a", "b")))
+  x <- sf::st_sf(a = values[, 1], b = values[, 2], geometry = geom)
+  result <- spseg(x, bands = c(0, 2), output = "localenv")
+
+  wide <- sf::st_as_sf(result, bands = c(0, 2), columns = "a")
+  long <- sf::st_as_sf(result, bands = c(0, 2), columns = "a",
+                       format = "long")
+
+  expect_s3_class(wide, "sf")
+  expect_equal(names(sf::st_drop_geometry(wide)), c("bw_0_a", "bw_2_a"))
+  expect_equal(nrow(wide), nrow(x))
+  expect_equal(as.character(unique(sf::st_geometry_type(wide))), "POLYGON")
+  expect_s3_class(long, "sf")
+  expect_equal(nrow(long), nrow(x) * 2)
+  expect_equal(sort(unique(long$band)), c(0, 2))
+  expect_equal(names(sf::st_drop_geometry(long)), c("a", "band"))
+})
+
+test_that("as.data.frame compiles selected SegResult local environments", {
+  toy <- toy_grid(cols = 5:6)
+  result <- spseg(toy$coords, toy$values, bands = c(0, 2),
+                  output = "localenv")
+
+  wide <- as.data.frame(result, what = "env", bands = c(0, 2),
+                        columns = "C1")
+  long <- as.data.frame(result, what = "env", bands = c(0, 2),
+                        columns = "C1", format = "long")
+
+  expect_equal(names(wide), c("x", "y", "bw_0_C1", "bw_2_C1"))
+  expect_equal(nrow(wide), nrow(toy$coords))
+  expect_equal(names(long), c("x", "y", "band", "C1"))
+  expect_equal(nrow(long), nrow(toy$coords) * 2)
+  expect_equal(sort(unique(long$band)), c(0, 2))
+})
+
 test_that("test_data spatial fixtures load and feed localenv", {
   fixtures <- new.env(parent = emptyenv())
   load(testthat::test_path("fixtures", "SegAll.RData"), envir = fixtures)

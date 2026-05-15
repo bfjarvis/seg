@@ -82,12 +82,13 @@ spseg_legacy_from_result <- function(result) {
 
 spseg_result <- function(coords, data, env, bands, indices, measures,
                          comparison, weighting, power, normalize, proj4string,
-                         output, call) {
+                         output, call, geometry = NULL) {
   keep_inputs <- !identical(output, "indices")
   SegResult(
     coords = if (keep_inputs) coords else NULL,
     data = if (keep_inputs) data else NULL,
     env = env,
+    geometry = if (keep_inputs) geometry else NULL,
     bands = bands,
     indices = indices,
     measures = measures,

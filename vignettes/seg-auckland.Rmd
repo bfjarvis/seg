@@ -24,6 +24,7 @@ package is installed.
 
 ```{r setup}
 library(seg)
+library(sf)
 library(ggplot2)
 ```
 
@@ -114,9 +115,12 @@ head(auck_env@env)
 Add the local environment share back to the `sf` object for mapping.
 
 ```{r localenv-share}
-auck$local_korean_share <- auck_env@env[, "Korean"] / rowSums(auck_env@env)
+auck_env_sf <- st_as_sf(auck_env)
+auck_env_counts <- st_drop_geometry(auck_env_sf)[, c("Korean", "Non_Korean")]
+auck_env_sf$local_korean_share <- auck_env_sf$Korean /
+  rowSums(auck_env_counts)
 
-summary(auck$local_korean_share)
+summary(auck_env_sf$local_korean_share)
 ```
 
 # Plot Local Environment Data
@@ -125,7 +129,7 @@ The local environment map smooths the raw area-unit shares by considering
 nearby population composition.
 
 ```{r localenv-map}
-ggplot(auck) +
+ggplot(auck_env_sf) +
   geom_sf(aes(fill = local_korean_share), color = NA) +
   scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
   labs(fill = "Local Korean share") +
@@ -137,17 +141,17 @@ The two maps can also be compared directly.
 ```{r raw-vs-local}
 plot_data <- rbind(
   data.frame(
-    geometry = sf::st_geometry(auck),
+    geometry = st_geometry(auck),
     share = auck$korean_share,
     type = "Raw area-unit share"
   ),
   data.frame(
-    geometry = sf::st_geometry(auck),
-    share = auck$local_korean_share,
+    geometry = st_geometry(auck_env_sf),
+    share = auck_env_sf$local_korean_share,
     type = "Local environment share"
   )
 )
-plot_data <- sf::st_as_sf(plot_data)
+plot_data <- st_as_sf(plot_data)
 
 ggplot(plot_data) +
   geom_sf(aes(fill = share), color = NA) +
@@ -176,36 +180,25 @@ bandwidths<-lapply(seq_along(bandwidths),
   length=3)
 bandwidths<-unique(Reduce(c,bandwidths))
 
-bandwidth_env <- lapply(
-  bandwidths,
-  function(bw) {
-    localenv(
-      auck[, c("Korean", "Non_Korean")],
-      maxdist = bw
-    )
-  }
+bandwidth_result <- spseg(
+  auck[, c("Korean", "Non_Korean")],
+  bands = bandwidths,
+  output = "full"
 )
-
-names(bandwidth_env) <- paste0(bandwidths / 1000, " km")
 ```
 
-First, convert a subset of the local environment outputs to an `sf` object for
+First, convert a subset of the stored local environments to an `sf` object for
 faceted mapping.
 
 ```{r bandwidth-map-data}
 map_bandwidths <- c(500, 1000, 2000, 4000, 8000, 16000)
-map_index <- match(map_bandwidths, bandwidths)
-
-bandwidth_maps <- do.call(
-  rbind,
-  lapply(map_index, function(i) {
-    env <- bandwidth_env[[i]]
-    out <- auck[, c("AU_NAME")]
-    out$bandwidth <- paste0(bandwidths[i] / 1000, " km")
-    out$local_korean_share <- env@env[, "Korean"] / rowSums(env@env)
-    out
-  })
-)
+bandwidth_maps <- st_as_sf(bandwidth_result, bands = map_bandwidths,
+                           format = "long")
+bandwidth_counts <- st_drop_geometry(bandwidth_maps)[, c("Korean",
+                                                         "Non_Korean")]
+bandwidth_maps$local_korean_share <- bandwidth_maps$Korean /
+  rowSums(bandwidth_counts)
+bandwidth_maps$bandwidth <- paste0(bandwidth_maps$band / 1000, " km")
 
 bandwidth_maps$bandwidth <- factor(
   bandwidth_maps$bandwidth,
@@ -225,20 +218,30 @@ ggplot(bandwidth_maps) +
 Next, calculate the segregation measures at every bandwidth.
 
 ```{r bandwidth-measures}
-bandwidth_measures <- do.call(
-  rbind,
-  lapply(seq_along(bandwidths), function(i) {
-    measures <- as.list(spseg(bandwidth_env[[i]], power=5))
-    data.frame(
-      bandwidth_m = bandwidths[i],
-      bandwidth_km = bandwidths[i] / 1000,
-      dissimilarity = measures$d,
-      diversity = measures$r,
-      information = measures$h,
-      korean_isolation = measures$p["Korean", "Korean"]
-    )
-  })
+overall_measures <- as.data.frame(bandwidth_result, what = "indices")
+overall_measures <- reshape(
+  overall_measures[, c("band", "measure", "value")],
+  idvar = "band",
+  timevar = "measure",
+  direction = "wide"
 )
+names(overall_measures) <- sub("^value\\.", "", names(overall_measures))
+
+exposure_measures <- as.data.frame(bandwidth_result, what = "exposure")
+korean_isolation <- exposure_measures[
+  exposure_measures$from_group == "Korean" &
+    exposure_measures$to_group == "Korean",
+  c("band", "exposure")
+]
+
+bandwidth_measures <- merge(overall_measures, korean_isolation, by = "band")
+names(bandwidth_measures)[names(bandwidth_measures) == "band"] <- "bandwidth_m"
+names(bandwidth_measures)[names(bandwidth_measures) == "d"] <- "dissimilarity"
+names(bandwidth_measures)[names(bandwidth_measures) == "r"] <- "diversity"
+names(bandwidth_measures)[names(bandwidth_measures) == "h"] <- "information"
+names(bandwidth_measures)[names(bandwidth_measures) == "exposure"] <-
+  "korean_isolation"
+bandwidth_measures$bandwidth_km <- bandwidth_measures$bandwidth_m / 1000
 
 head(bandwidth_measures)
 ```

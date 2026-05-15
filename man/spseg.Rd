@@ -90,7 +90,7 @@ xx1 <- spseg(env)
 print(xx1, digits = 3)
 
 if (requireNamespace("ggplot2", quietly = TRUE)) {
-  env_sf <- cbind(grd_sf, as.data.frame(env@env))
+  env_sf <- st_as_sf(env, columns = "A1")
   ggplot2::ggplot(env_sf) +
     ggplot2::geom_sf(ggplot2::aes(fill = A1), color = "white") +
     ggplot2::scale_fill_viridis_c() +
@@ -129,9 +129,11 @@ xx5 <- spseg(
   coords_df,
   data = test.df,
   bands = c(1, 2, 3),
-  output = "indices"
+  output = "full"
 )
 as.data.frame(xx5)
+head(as.data.frame(xx5, what = "env", columns = "A1"))
+head(as.data.frame(xx5, what = "env", columns = "A1", format = "long"))
 
 xx6 <- spseg(
   coords_df,

@@ -152,8 +152,8 @@ ggplot(providence) +
 
 # Local Environments
 
-Providence block geometries are projected in metres, so bandwidths below are
-interpreted as metres. A bandwidth of 1 metre is included as a reference case:
+Providence block geometries are projected in meters, so bandwidths below are
+interpreted as meters. A bandwidth of 1 meter is included as a reference case:
 because block centroids are farther apart than this, it reproduces the original
 block composition.
 
@@ -178,20 +178,13 @@ stopifnot(length(providence_env@env) == length(env_bands))
 Convert local environment counts to local Hispanic shares for mapping.
 
 ```{r local-share-data}
-local_maps <- do.call(
-  rbind,
-  lapply(seq_along(env_bands), function(i) {
-    env <- providence_env@env[[i]]
-    out <- providence[, c("GISJOIN")]
-    out$band <- paste0(env_bands[i], " m")
-    out$hispanic_share <- env[, "Hispanic"] / rowSums(env)
-    out$hispanic_share <- ifelse(providence$Total == 0, NA,
-                                 out$hispanic_share)
-    out
-  })
-)
-
-local_maps$band <- factor(local_maps$band, levels = paste0(env_bands, " m"))
+local_maps <- st_as_sf(providence_env, bands = env_bands, format = "long")
+local_counts <- st_drop_geometry(local_maps)[, group_cols]
+local_maps$hispanic_share <- local_maps$Hispanic / rowSums(local_counts)
+local_maps$hispanic_share <- ifelse(rowSums(local_counts) == 0, NA,
+                                    local_maps$hispanic_share)
+local_maps$band <- factor(paste0(local_maps$band, " m"),
+                          levels = paste0(env_bands, " m"))
 summary(local_maps$hispanic_share)
 ```
 

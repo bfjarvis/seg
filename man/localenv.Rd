@@ -87,11 +87,14 @@ vv1 <- localenv(coords, data = segdata[,5:6], weighting = "biweight", power = 1)
 vv2 <- localenv(coords, data = segdata[,5:6], weighting = "biweight", power = 2)
 vv3 <- localenv(coords, data = segdata[,5:6], weighting = "biweight", power = 3)
 
+# local environments can be exported as centroid coordinates plus values
+head(as.data.frame(vv1))
+
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   plot_data <- rbind(
-    transform(as(vv1, "sf"), power = "p = 1"),
-    transform(as(vv2, "sf"), power = "p = 2"),
-    transform(as(vv3, "sf"), power = "p = 3")
+    transform(st_as_sf(vv1, columns = "C1"), power = "p = 1"),
+    transform(st_as_sf(vv2, columns = "C1"), power = "p = 2"),
+    transform(st_as_sf(vv3, columns = "C1"), power = "p = 3")
   )
 
   ggplot2::ggplot(plot_data) +

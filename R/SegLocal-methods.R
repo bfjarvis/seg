@@ -7,11 +7,47 @@
 # ------------------------------------------------------------------------------
 # Coercion methods
 # ------------------------------------------------------------------------------
+.seg_env_subset <- function(env, columns = NULL) {
+  if (is.null(columns))
+    return(env)
+  if (is.numeric(columns))
+    return(env[, columns, drop = FALSE])
+  if (!all(columns %in% colnames(env)))
+    stop("'columns' must name columns in the local environment matrix",
+         call. = FALSE)
+  env[, columns, drop = FALSE]
+}
+
+.seg_env_sf <- function(env, coords, geometry, crs, columns = NULL) {
+  out <- data.frame(.seg_env_subset(env, columns))
+  if (!is.null(geometry)) {
+    st_sf(out, geometry = geometry)
+  } else {
+    out$x <- coords[, 1]
+    out$y <- coords[, 2]
+    st_as_sf(out, coords = c("x", "y"), crs = st_crs(crs))
+  }
+}
+
+st_as_sf.SegLocal <- function(x, ..., columns = NULL) {
+  validObject(x)
+  .seg_env_sf(x@env, x@coords, x@geometry, x@proj4string, columns = columns)
+}
+
+as.data.frame.SegLocal <- function(x, row.names = NULL, optional = FALSE, ...,
+                                   columns = NULL) {
+  validObject(x)
+  out <- data.frame(x = x@coords[, 1], y = x@coords[, 2],
+                    .seg_env_subset(x@env, columns),
+                    check.names = !optional)
+  if (!is.null(row.names))
+    rownames(out) <- row.names
+  out
+}
+
 setAs("SegLocal", "sf", 
       function(from) {
-        validObject(from)
-        st_as_sf(data.frame(from@env, x = from@coords[, 1], y = from@coords[, 2]),
-                 coords = c("x", "y"), crs = st_crs(from@proj4string))
+        st_as_sf(from)
       })
 
 setAs("SegLocal", "SpatialPointsDataFrame", 
@@ -33,13 +69,19 @@ setAs("SegLocal", "SpatialPixelsDataFrame",
 setAs("SpatialPointsDataFrame", "SegLocal", 
       function(from) {
         SegLocal(coords = st_coordinates(from), data = from@data, env = from@data, 
-                 proj4string = st_crs(from))
+                 proj4string = st_crs(from), geometry = st_geometry(st_as_sf(from)))
       })
 
 setAs("SpatialPolygonsDataFrame", "SegLocal", 
       function(from) {
-        SegLocal(coords = st_coordinates(from), data = from@data, 
-                 env = from@data, proj4string = st_crs(from))
+        from_sf <- st_as_sf(from)
+        coords <- st_geometry(from_sf) |>
+          st_make_valid() |>
+          st_centroid() |>
+          st_coordinates()
+        SegLocal(coords = coords, data = from@data, env = from@data,
+                 proj4string = st_crs(from),
+                 geometry = st_geometry(from_sf))
       })
 
 # ------------------------------------------------------------------------------
@@ -143,13 +185,16 @@ summary.SegLocal <- function(object, ...) {
 # ------------------------------------------------------------------------------
 update.SegLocal <- function(object, coords, data, env, proj4string, ...) {
   validObject(object)
+  dots <- list(...)
   
   if (missing(coords)) coords <- object@coords
   if (missing(data)) data <- object@data
   if (missing(env)) env <- object@env
   if (missing(proj4string)) proj4string <- object@proj4string
+  geometry <- if ("geometry" %in% names(dots)) dots$geometry else
+    object@geometry
   
-  SegLocal(coords, data, env, proj4string)
+  SegLocal(coords, data, env, proj4string, geometry = geometry)
 }
 
 # Methods that are not so useful (removed on 23 December 2013) ...

@@ -11,6 +11,7 @@ localenv <- function(x, data, power = 3,
   
   tmp <- suppressMessages(chksegdata(x, data))
   coords <- tmp$coords; data <- tmp$data; proj4string <- tmp$proj4string
+  geometry <- tmp$geometry
   .localenv_dots(...)
   useExp_supplied <- !missing(useExp)
   scale_supplied <- !missing(scale)
@@ -33,7 +34,8 @@ localenv <- function(x, data, power = 3,
 
   if (!maxdist_missing && maxdist == 0) {
     message("localenv maxdist is 0; using observed data as local environments")
-    return(SegLocal(coords, data, data, st_crs(proj4string)))
+    return(SegLocal(coords, data, data, st_crs(proj4string),
+                    geometry = geometry))
   }
   
   if (missing(sprel)) {
@@ -66,5 +68,5 @@ localenv <- function(x, data, power = 3,
     nb = localenv_nb(relation, data)
   )
   
-  SegLocal(coords, data, env, st_crs(proj4string))
+  SegLocal(coords, data, env, st_crs(proj4string), geometry = geometry)
 }

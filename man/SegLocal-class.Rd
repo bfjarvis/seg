@@ -4,10 +4,12 @@
 \alias{coerce,SegLocal,SpatialPoints-method}
 \alias{coerce,SegLocal,SpatialPointsDataFrame-method}
 \alias{coerce,SegLocal,SpatialPixelsDataFrame-method}
+\alias{coerce,SegLocal,sf-method}
 \alias{coerce,SpatialPointsDataFrame,SegLocal-method}
 \alias{coerce,SpatialPolygonsDataFrame,SegLocal-method}
 \alias{show,SegLocal-method}
 \alias{print.SegLocal-method}
+\alias{as.data.frame.SegLocal}
 \alias{plot.SegLocal-method}
 \alias{points.SegLocal-method}
 \alias{spplot,SegLocal-method}
@@ -24,6 +26,7 @@ Objects can be created by calls to \code{\link{localenv}}, or the constructor \c
     \item{coords}{a numeric matrix or data frame with coordinates (each row is a point).}
     \item{data}{an object of class \code{matrix} containing the population data at each data point. The number of rows in \sQuote{data} should equal the number of points in \sQuote{coords}, and the number of columns should be greater than one (i.e., at least two population groups are required).}
     \item{env}{an object of class \code{matrix} containing the local environment parameters. Must be the same dimensions as \sQuote{data}.}
+    \item{geometry}{an optional \code{sfc} geometry object with one feature per row. When present, coercion to \code{sf} returns the local environment values with this geometry.}
     \item{proj4string}{an optional projection string of class \code{CRS}.}
   }
 }
@@ -32,6 +35,8 @@ Objects can be created by calls to \code{\link{localenv}}, or the constructor \c
     \item{coerce}{\code{signature(from = "SegLocal", to = "SpatialPoints")}: coerce an object of class \code{SegLocal} to an object of class \code{SpatialPoints}. The points have no attribute data.}
     \item{coerce}{\code{signature(from = "SegLocal", to = "SpatialPointsDataFrame")}: coerce an object of class \code{SegLocal} to an object of class \code{SpatialPointsDataFrame}. The values in the slot \sQuote{env} will be used as the attribute data.}
     \item{coerce}{\code{signature(from = "SegLocal", to = "SpatialPixelsDataFrame")}: coerce an object of class \code{SegLocal} to an object of class \code{SpatialPixelsDataFrame}. The values in the slot \sQuote{env} will be used as the attribute data. May not work when the points are irregularly spaced.}
+    \item{coerce}{\code{signature(from = "SegLocal", to = "sf")}: coerce an object of class \code{SegLocal} to an \code{sf} object. The values in the slot \sQuote{env} are used as attributes. Stored geometry is used when available; otherwise point geometry is created from \sQuote{coords}.}
+    \item{as.data.frame}{return a data frame containing centroid coordinates \code{x} and \code{y}, followed by the local environment columns. Use \code{columns} to select a subset of local environment columns.}
     \item{coerce}{\code{signature(from = "SpatialPointsDataFrame", to = "SegLocal")}: coerce an object of class \code{SpatialPointsDataFrame} to an object of class \code{SegLocal}.}
     \item{coerce}{\code{signature(from = "SpatialPolygonsDataFrame", to = "SegLocal")}: coerce an object of class \code{SpatialPolygonsDataFrame} to an object of class \code{SegLocal}.}
     \item{show}{\code{signature(object = "SegLocal")}: show the number of points and data columns in an object of class \code{SegLocal}.}
@@ -57,6 +62,7 @@ colnames(pop) <- LETTERS[1:3]
 # constructs an object of class 'SegLocal'
 v <- SegLocal(coords = as.matrix(xy), data = pop, env = pop)
 summary(v)
+head(as.data.frame(v))
 
 # updates the map projection information
 v <- update(v, proj4string = st_crs("+proj=nzmg +datum=nzgd49"))
@@ -64,7 +70,7 @@ summary(v)
 
 # converts the object to sf and plots a local population column
 if (requireNamespace("ggplot2", quietly = TRUE)) {
-  v_sf <- as(v, "sf")
+  v_sf <- st_as_sf(v, columns = "A")
   ggplot2::ggplot(v_sf) +
     ggplot2::geom_sf(ggplot2::aes(color = A), size = 2) +
     ggplot2::scale_color_viridis_c() +

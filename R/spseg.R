@@ -74,7 +74,8 @@ spseg <- function(x,
         character(),
       comparison = comparison, weighting = character(), power = numeric(),
       normalize = logical(),
-      proj4string = x@proj4string, output = output, call = call
+      proj4string = x@proj4string, output = output, call = call,
+      geometry = x@geometry
     ))
   }
 
@@ -115,7 +116,8 @@ spseg <- function(x,
         character(),
       comparison = comparison, weighting = weighting, power = power,
       normalize = normalize,
-      proj4string = st_crs(checked$proj4string), output = output, call = call
+      proj4string = st_crs(checked$proj4string), output = output,
+      call = call, geometry = checked$geometry
     ))
   }
 
@@ -143,7 +145,8 @@ spseg <- function(x,
         character(),
       comparison = comparison, weighting = weighting, power = power,
       normalize = normalize,
-      proj4string = st_crs(checked$proj4string), output = output, call = call
+      proj4string = st_crs(checked$proj4string), output = output,
+      call = call, geometry = checked$geometry
     ))
   }
 

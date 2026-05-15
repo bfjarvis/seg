@@ -8,6 +8,7 @@ chksegdata <- function(x, data) {
   
   begTime <- Sys.time(); fn <- match.call()[[1]]
   proj4string <- as.character(NA)
+  geometry <- NULL
   
   # ----------------------------------------------------------------------------
   #
@@ -18,6 +19,7 @@ chksegdata <- function(x, data) {
   # ----------------------------------------------------------------------------
   if (inherits(x, "sf")) { 
     message(fn, ": 'x' is an object of class \"sf\"")
+    geometry <- st_geometry(x)
     
     coords <- try(st_geometry(x) |> st_make_valid() |> 
                     st_centroid() |> st_coordinates(), silent = TRUE)
@@ -104,5 +106,6 @@ chksegdata <- function(x, data) {
   message(fn, ": done! [", tt, " seconds]")
   
   colnames(coords) <- c("x", "y")
-  list(coords = coords, data = data, proj4string = proj4string)
+  list(coords = coords, data = data, proj4string = proj4string,
+       geometry = geometry)
 }

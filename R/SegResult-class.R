@@ -5,6 +5,7 @@
 # ------------------------------------------------------------------------------
 setClass(Class = "SegResult",
          slots = c(coords = "ANY", data = "ANY", env = "ANY",
+                   geometry = "ANY",
                    bands = "numeric", indices = "list",
                    measures = "character", weighting = "character",
                    power = "numeric", normalize = "logical",
@@ -30,6 +31,11 @@ setValidity(Class = "SegResult",
                 if (length(object@env) != length(object@bands))
                   return("'env' must have one element per band")
               }
+              if (!is.null(object@geometry) &&
+                  (!inherits(object@geometry, "sfc") ||
+                   (!is.null(object@coords) &&
+                    length(object@geometry) != nrow(object@coords))))
+                return("'geometry' must be NULL or an sfc object with one feature per row")
               if (length(object@bands) == 0 || any(!is.finite(object@bands)))
                 return("'bands' must contain finite numeric values")
               if (class(object@proj4string) != "crs")
@@ -41,9 +47,11 @@ SegResult <- function(coords = NULL, data = NULL, env = NULL, bands,
                       indices = list(), measures = character(),
                       weighting = character(), power = numeric(),
                       normalize = logical(), neighbors = list(type = "radius"),
-                      proj4string = st_crs(as.character(NA)), call = NULL) {
-  new("SegResult", coords = coords, data = data, env = env, bands = bands,
-      indices = indices, measures = measures, weighting = weighting,
-      power = power, normalize = normalize, neighbors = neighbors,
-      proj4string = proj4string, call = call)
+                      geometry = NULL, proj4string = st_crs(as.character(NA)),
+                      call = NULL) {
+  new("SegResult", coords = coords, data = data, env = env,
+      geometry = geometry, bands = bands, indices = indices,
+      measures = measures, weighting = weighting, power = power,
+      normalize = normalize, neighbors = neighbors, proj4string = proj4string,
+      call = call)
 }

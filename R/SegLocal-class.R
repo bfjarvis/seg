@@ -5,6 +5,7 @@
 # ------------------------------------------------------------------------------
 setClass(Class = "SegLocal", 
          slots = c(coords = "matrix", data = "matrix", env = "matrix",
+                   geometry = "ANY",
                    proj4string = "crs"))
 
 setValidity(Class = "SegLocal", 
@@ -19,15 +20,20 @@ setValidity(Class = "SegLocal",
                 paste("'env' must be a matrix with the same dimensions as 'data'")
               else if (!is.numeric(object@env))
                 paste("'env' must be a numeric matrix")
+              else if (!is.null(object@geometry) &&
+                       (!inherits(object@geometry, "sfc") ||
+                        length(object@geometry) != nrow(object@coords)))
+                paste("'geometry' must be NULL or an sfc object with one feature per row")
               else if (class(object@proj4string) != "crs")
                 paste("'proj4string' is not a valid CRS object")
               else
                 TRUE
             })
 
-SegLocal <- function(coords, data, env, proj4string = st_crs(as.character(NA))) {
+SegLocal <- function(coords, data, env, proj4string = st_crs(as.character(NA)),
+                     geometry = NULL) {
   new("SegLocal", coords = coords, data = data, env = env,
-      proj4string = proj4string)
+      geometry = geometry, proj4string = proj4string)
 }
 
 # SegLocal <- function(coords, data, env, proj4string = CRS(as.character(NA))) {
