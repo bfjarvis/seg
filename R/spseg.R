@@ -13,6 +13,7 @@ spseg <- function(x,
                   power = 3,
                   normalize = TRUE,
                   smoothing = NULL,
+                  comparison = c("overall", "pairwise", "both"),
                   output = c("legacy", "full", "indices", "localenv"),
                   useC = TRUE,
                   negative.rm = FALSE,
@@ -21,6 +22,7 @@ spseg <- function(x,
 
   call <- match.call()
   output <- spseg_output(output)
+  comparison <- spseg_comparison(comparison)
 
   # parse inputs
   dots <- spseg_dots(...)
@@ -35,6 +37,8 @@ spseg <- function(x,
   dots <- smoothing_config$dots
   weighting <- if (missing(weighting)) "biweight" else match.arg(weighting)
   normalize <- isTRUE(normalize)
+  if (!identical(comparison, "overall") && identical(output, "legacy"))
+    output <- "full"
 
   data_arg <- if (missing(data)) NULL else data
   bands <- spseg_bands(maxdist, bands, output, x, data_arg)
@@ -58,7 +62,8 @@ spseg <- function(x,
 
   if (inherits(x, "SegLocal")) {
     indices <- if (identical(output, "localenv")) list() else
-      spseg_indices_from_localenv(x, measures, useC, negative.rm)
+      spseg_indices_from_localenv(x, measures, useC, negative.rm,
+                                  comparison = comparison)
     if (length(indices) > 0)
       indices <- spseg_indices_from_engine(indices, 1)
     env <- if (identical(output, "indices")) NULL else list(x@env)
@@ -67,7 +72,8 @@ spseg <- function(x,
       indices = indices,
       measures = if (length(indices) > 0) spseg_measures(measures) else
         character(),
-      weighting = character(), power = numeric(), normalize = logical(),
+      comparison = comparison, weighting = character(), power = numeric(),
+      normalize = logical(),
       proj4string = x@proj4string, output = output, call = call
     ))
   }
@@ -97,7 +103,8 @@ spseg <- function(x,
     )
     env <- update(env, proj4string = st_crs(checked$proj4string))
     indices <- if (identical(output, "localenv")) list() else
-      spseg_indices_from_localenv(env, measures, useC, negative.rm)
+      spseg_indices_from_localenv(env, measures, useC, negative.rm,
+                                  comparison = comparison)
     if (length(indices) > 0)
       indices <- spseg_indices_from_engine(indices, bands)
     return(spseg_result(
@@ -106,7 +113,8 @@ spseg <- function(x,
       bands = bands, indices = indices,
       measures = if (length(indices) > 0) spseg_measures(measures) else
         character(),
-      weighting = weighting, power = power, normalize = normalize,
+      comparison = comparison, weighting = weighting, power = power,
+      normalize = normalize,
       proj4string = st_crs(checked$proj4string), output = output, call = call
     ))
   }
@@ -123,6 +131,7 @@ spseg <- function(x,
       weighting = weighting,
       normalize = normalize,
       measures = measures_to_compute,
+      comparison = comparison,
       keep_env = !identical(output, "indices"),
       keep_indices = !identical(output, "localenv")
     )
@@ -132,7 +141,8 @@ spseg <- function(x,
       bands = bands, indices = indices,
       measures = if (length(indices) > 0) spseg_measures(measures) else
         character(),
-      weighting = weighting, power = power, normalize = normalize,
+      comparison = comparison, weighting = weighting, power = power,
+      normalize = normalize,
       proj4string = st_crs(checked$proj4string), output = output, call = call
     ))
   }

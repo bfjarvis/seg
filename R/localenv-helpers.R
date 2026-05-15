@@ -119,7 +119,8 @@ localenv_coords <- function(coords, data, power, weighting, normalize, maxdist) 
 }
 
 seg_engine_coords <- function(coords, data, bands, power, weighting, normalize,
-                              measures, keep_env, keep_indices) {
+                              measures, comparison = "overall", keep_env,
+                              keep_indices) {
   if (nrow(coords) != nrow(data))
     stop("'data' must have the same number of rows as 'coords'", call. = FALSE)
 
@@ -129,18 +130,26 @@ seg_engine_coords <- function(coords, data, bands, power, weighting, normalize,
   measures <- if (keep_indices) spseg_measures(measures) else character()
   measure_flags <- c("exposure" %in% measures, "information" %in% measures,
                      "diversity" %in% measures, "dissimilarity" %in% measures)
-  out <- .Call("seg_engine", xval, yval, as.vector(data), as.integer(dim),
+  comparison_flags <- spseg_comparison_flags(comparison)
+  out <- .Call("seg_engine", xval, yval, data,
                bands, power, as.integer(.localenv_weighting_id(weighting)),
                as.integer(normalize), as.integer(measure_flags),
-               as.integer(keep_env), as.integer(keep_indices))
+               as.integer(comparison_flags), as.integer(keep_env),
+               as.integer(keep_indices))
 
   if (!is.null(out$env)) {
     out$env <- lapply(out$env, .restore_env_dimnames, data = data)
   }
-  if (!is.null(out$indices$p)) {
-    out$indices$p <- lapply(out$indices$p, function(p) {
+  if (!is.null(out$indices$overall$p)) {
+    out$indices$overall$p <- lapply(out$indices$overall$p, function(p) {
       rownames(p) <- colnames(p) <- colnames(data)
       p
+    })
+  }
+  for (nm in intersect(c("d", "r", "h"), names(out$indices$pairwise))) {
+    out$indices$pairwise[[nm]] <- lapply(out$indices$pairwise[[nm]], function(x) {
+      rownames(x) <- colnames(x) <- colnames(data)
+      x
     })
   }
 

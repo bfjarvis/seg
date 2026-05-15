@@ -1,0 +1,315 @@
+---
+title: "Empirical Example: Providence Race Segregation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Empirical Example: Providence Race Segregation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+population_path <- "/Users/bjarvis/Dropbox/Data Sources/US Census/Decennial/2010/RI_Block_Race/nhgis0026_ds172_2010_block.csv"
+shape_path <- "/Users/bjarvis/Dropbox/Data Sources/Geography/United States/Census Shape Files/2010/tl2010_440_block_2010/RI_block_2010.shp"
+have_ri_sources <- file.exists(population_path) && file.exists(shape_path)
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  eval = have_ri_sources
+)
+```
+
+# Introduction
+
+This vignette develops an empirical example using 2010 Census block data for
+Providence, Rhode Island. It is intentionally written as a reproducible import
+and preparation script: while the package is under development, the raw data are
+read from local source files, joined to block geometries, recoded into mutually
+exclusive race and Hispanic-origin categories, and then used to exercise the
+multi-group and pairwise segregation workflows.
+
+The population data come from IPUMS NHGIS table P5, Hispanic or Latino Origin
+by Race, for 2010 Census blocks in Rhode Island. The block geometries are 2010
+Census TIGER/Line block shapes for Rhode Island.
+
+```{r source-check, eval = TRUE}
+have_ri_sources
+```
+
+If the result above is `FALSE`, the local source files are not available and
+the executable chunks below are skipped. The full import code is left in place
+so the workflow can be rerun once the source files are available.
+
+```{r setup}
+devtools::load_all()
+library(sf)
+library(ggplot2)
+```
+
+# Import Source Data
+
+Read the NHGIS population extract and Rhode Island block geometries.
+
+```{r read-source-data}
+
+race <- read.csv(population_path, check.names = FALSE,
+                 stringsAsFactors = FALSE)
+race$Total <- race$H7Z001
+race$White <- race$H7Z003
+race$Black <- race$H7Z004
+race$Asian <- race$H7Z006
+race$Hispanic <- race$H7Z010
+race$Other <- race$H7Z005 + race$H7Z007 + race$H7Z008 + race$H7Z009
+race<-race[,c("GISJOIN","PLACEA","Total",'White','Black','Asian','Hispanic','Other')]
+
+ri_blocks <- sf::st_read(shape_path, quiet = TRUE)
+
+dim(race)
+dim(ri_blocks)
+names(race)
+names(ri_blocks)
+```
+
+The NHGIS file includes a `PLACEA` code. Providence city is `59000`. The
+shapefile and the NHGIS extract both include `GISJOIN`, which provides the
+join key.
+
+```{r filter-providence}
+providence <- merge(ri_blocks, race[race$PLACEA==59000,], by = "GISJOIN")
+providence <- providence[order(providence$GISJOIN), ]
+
+nrow(providence)
+sum(providence$Total)
+unique(providence$COUNTY)
+```
+
+# Prepare Population Groups
+
+The NHGIS P5 table separates Hispanic origin from race. For these examples,
+construct mutually exclusive categories:
+
+* `White`: not Hispanic or Latino, White alone
+* `Black`: not Hispanic or Latino, Black or African American alone
+* `Asian`: not Hispanic or Latino, Asian alone
+* `Hispanic`: Hispanic or Latino, any race
+* `Other`: remaining non-Hispanic categories
+
+```{r prepare-groups}
+group_cols <- c("White", "Black", "Asian", "Hispanic", "Other")
+group_counts <- sf::st_drop_geometry(providence[, group_cols])
+
+stopifnot(all(rowSums(group_counts) == providence$Total))
+stopifnot(sum(providence$Total) == 178042)
+
+colSums(group_counts)
+```
+
+Add a few shares for plotting and checking.
+
+```{r group-shares}
+providence$white_share <- ifelse(providence$Total > 0,
+                                 providence$White / providence$Total, NA)
+providence$black_share <- ifelse(providence$Total > 0,
+                                 providence$Black / providence$Total, NA)
+providence$asian_share <- ifelse(providence$Total > 0,
+                                 providence$Asian / providence$Total, NA)
+providence$hispanic_share <- ifelse(providence$Total > 0,
+                                    providence$Hispanic / providence$Total, NA)
+
+dominant_id <- max.col(group_counts, ties.method = "first")
+providence$largest_group <- group_cols[dominant_id]
+providence$largest_group <- ifelse(providence$Total<=0,NA,providence$largest_group)
+providence$largest_group <- factor(providence$largest_group, levels = group_cols)
+
+
+summary(providence[, c("Total", "white_share", "black_share",
+                       "asian_share", "hispanic_share")])
+```
+
+# Plot Raw Data
+
+The first map shows the largest group in each populated block.
+
+```{r dominant-group-map}
+ggplot(providence) +
+  geom_sf(aes(fill = factor(largest_group)), color = NA) +
+  scale_fill_discrete(na.value='gray70') +
+  labs(fill = "Largest group") +
+  theme_minimal()
+```
+
+The next map focuses on the Hispanic share of each block's population.
+
+```{r hispanic-share-map}
+ggplot(providence) +
+  geom_sf(aes(fill = hispanic_share), color = NA) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x), "%"),na.value='gray70') +
+  labs(fill = "Hispanic share") +
+  theme_minimal()
+```
+
+# Local Environments
+
+Providence block geometries are projected in metres, so bandwidths below are
+interpreted as metres. A bandwidth of 1 metre is included as a reference case:
+because block centroids are farther apart than this, it reproduces the original
+block composition.
+
+```{r local-environments}
+env_bands <- c(1, 250, 1000, 2000)
+providence_env <- spseg(
+  providence[, group_cols],
+  bands = env_bands,
+  weighting = "biweight",
+  power = 3,
+  normalize = TRUE,
+  measures = "dissimilarity",
+  comparison = "overall",
+  output = "full"
+)
+
+providence_env
+stopifnot(inherits(providence_env, "SegResult"))
+stopifnot(length(providence_env@env) == length(env_bands))
+```
+
+Convert local environment counts to local Hispanic shares for mapping.
+
+```{r local-share-data}
+local_maps <- do.call(
+  rbind,
+  lapply(seq_along(env_bands), function(i) {
+    env <- providence_env@env[[i]]
+    out <- providence[, c("GISJOIN")]
+    out$band <- paste0(env_bands[i], " m")
+    out$hispanic_share <- env[, "Hispanic"] / rowSums(env)
+    out$hispanic_share <- ifelse(providence$Total == 0, NA,
+                                 out$hispanic_share)
+    out
+  })
+)
+
+local_maps$band <- factor(local_maps$band, levels = paste0(env_bands, " m"))
+summary(local_maps$hispanic_share)
+```
+
+```{r local-share-map}
+ggplot(local_maps) +
+  geom_sf(aes(fill = hispanic_share), color = NA) +
+  facet_wrap(~ band,nrow=2) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x), "%")) +
+  labs(fill = "Hispanic share") +
+  theme_minimal()
+```
+
+# Multi-Band Segregation
+
+Now compute multi-group segregation indices across several bandwidths. This
+uses the unified multi-band engine and returns only the indices.
+
+```{r multiband-indices}
+bands <- c(250, 500, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 10000)
+
+providence_seg <- spseg(
+  providence[, group_cols],
+  bands = bands,
+  weighting = "biweight",
+  power = 3,
+  normalize = TRUE,
+  measures = c("dissimilarity", "information", "diversity"),
+  comparison = "both",
+  output = "indices"
+)
+
+providence_seg
+stopifnot(inherits(providence_seg, "SegResult"))
+stopifnot(identical(providence_seg@bands, bands))
+stopifnot(is.null(providence_seg@env))
+```
+
+The overall indices summarize multi-group segregation at each bandwidth.
+
+```{r overall-indices}
+overall_indices <- as.data.frame(providence_seg, what = "indices")
+overall_indices
+
+stopifnot(nrow(overall_indices) == length(bands) * 3)
+stopifnot(all(is.finite(overall_indices$value)))
+```
+
+```{r overall-index-plot}
+ggplot(overall_indices, aes(x = band, y = value, color = measure)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Bandwidth (m)", y = "Index value", color = "Measure") +
+  theme_minimal()
+```
+
+# Pairwise Segregation
+
+The same object also contains pairwise versions of the scalar indices. These
+are returned separately from the overall multi-group indices.
+
+```{r pairwise-indices}
+pairwise_indices <- as.data.frame(providence_seg, what = "pairwise")
+head(pairwise_indices)
+
+expected_pairs <- choose(length(group_cols), 2)
+stopifnot(nrow(pairwise_indices) == length(bands) * 3 * expected_pairs)
+stopifnot(all(is.finite(pairwise_indices$value)))
+```
+
+```{r pairwise-dissimilarity-plot}
+pairwise_d <- pairwise_indices[pairwise_indices$measure == "d", ]
+pairwise_d$pair <- paste(pairwise_d$group_a, pairwise_d$group_b, sep = "-")
+
+ggplot(pairwise_d[grepl("White",pairwise_d$pair),], 
+       aes(x = band, y = value, color = pair)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Bandwidth (m)", y = "Pairwise dissimilarity", color = "Pair") +
+  theme_minimal()
+```
+
+# Two-Group Consistency Check
+
+When there are only two groups, the pairwise scalar indices should match the
+corresponding overall indices. This final section is deliberately test-like and
+can be used as a quick check on the pairwise implementation.
+
+```{r two-group-check}
+two_group_seg <- spseg(
+  providence[, c("White", "Hispanic")],
+  bands = bands,
+  weighting = "biweight",
+  power = 3,
+  normalize = TRUE,
+  measures = c("dissimilarity", "information", "diversity"),
+  comparison = "both",
+  output = "indices"
+)
+
+for (measure in c("d", "h", "r")) {
+  overall <- two_group_seg@indices$overall[[measure]]
+  pairwise <- vapply(
+    two_group_seg@indices$pairwise[[measure]],
+    function(x) x["White", "Hispanic"],
+    numeric(1)
+  )
+  stopifnot(isTRUE(all.equal(unname(overall), unname(pairwise),
+                             tolerance = 1e-12)))
+}
+```
+
+# Source
+
+Population data: IPUMS NHGIS, 2010 Census SF 1a, table P5, Hispanic or Latino
+Origin by Race, Rhode Island blocks. Suggested citation from the NHGIS
+codebook: Jonathan Schroeder, David Van Riper, Steven Manson, Katherine
+Knowles, Tracy Kugler, Finn Roberts, and Steven Ruggles. IPUMS National
+Historical Geographic Information System: Version 20.0 [dataset].
+Minneapolis, MN: IPUMS. 2025. <http://doi.org/10.18128/D050.V20.0>.
+
+Geometry: U.S. Census Bureau 2010 TIGER/Line block shapefile for Rhode Island.

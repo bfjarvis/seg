@@ -6,6 +6,8 @@ Author: Seong-Yun Hong <syhong@khu.ac.kr> and David O'Sullivan, with code
   contributions by Benjamin Jarvis and Changlock Choi
 Maintainer: Seong-Yun Hong <syhong@khu.ac.kr>
 Depends: R (>= 4.2.0), methods, stats, sf, sp, splancs
+Imports: Rcpp, RcppArmadillo
+LinkingTo: Rcpp, RcppArmadillo
 Suggests: ggplot2, knitr, rmarkdown, spdep, terra, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 VignetteBuilder: knitr

@@ -151,6 +151,79 @@ test_that("spseg handles zero entropy terms without tolerance adjustment", {
   expect_equal(c_result$h, 1, tolerance = 1e-12)
 })
 
+test_that("spseg dissimilarity uses generalized local-environment formula", {
+  coords <- cbind(x = 1:3, y = 0)
+  values <- matrix(c(10, 20, 70,
+                     15, 15, 70,
+                     30, 10, 60),
+                   ncol = 3, byrow = TRUE)
+  colnames(values) <- c("a", "b", "c")
+  env_values <- matrix(c(20, 10, 70,
+                         15, 15, 70,
+                         10, 20, 70),
+                       ncol = 3, byrow = TRUE)
+  colnames(env_values) <- colnames(values)
+  env <- SegLocal(coords, values, env_values)
+  env_prop <- env_values / rowSums(env_values)
+  overall_prop <- colSums(values) / sum(values)
+  interaction <- sum(overall_prop * (1 - overall_prop))
+  expected <- sum(colSums(
+    abs(env_prop - matrix(overall_prop, nrow = nrow(env_prop),
+                          ncol = ncol(env_prop), byrow = TRUE)) *
+      (rowSums(values) / (2 * sum(values) * interaction))
+  ))
+
+  expect_equal(as.list(spseg(env, measures = "dissimilarity",
+                             useC = FALSE))$d,
+               expected, tolerance = 1e-12)
+  expect_equal(as.list(spseg(env, measures = "dissimilarity",
+                             useC = TRUE))$d,
+               expected, tolerance = 1e-12)
+  expect_equal(
+    spseg(coords, data = values, bands = 1, output = "indices",
+          measures = "dissimilarity")@indices$overall$d[[1]],
+    as.list(spseg(localenv(coords, data = values, maxdist = 1),
+                  measures = "dissimilarity"))$d,
+    tolerance = 1e-12
+  )
+})
+
+test_that("pairwise scalar indices agree with overall indices for two groups", {
+  toy <- toy_grid(cols = 5:6)
+  result <- spseg(toy$coords, toy$values, bands = c(1, 2),
+                  output = "indices", comparison = "both")
+
+  for (band in names(result@indices$overall$d)) {
+    expect_equal(result@indices$pairwise$d[[band]][1, 2],
+                 result@indices$overall$d[[band]], tolerance = 1e-12)
+    expect_equal(result@indices$pairwise$r[[band]][1, 2],
+                 result@indices$overall$r[[band]], tolerance = 1e-12)
+    expect_equal(result@indices$pairwise$h[[band]][1, 2],
+                 result@indices$overall$h[[band]], tolerance = 1e-12)
+  }
+})
+
+test_that("pairwise indices skip units outside the pair and mark empty pairs", {
+  coords <- cbind(x = 1:4, y = 0)
+  values <- matrix(c(0, 0, 10, 0,
+                     5, 0, 0, 0,
+                     0, 5, 0, 0,
+                     0, 0, 5, 0),
+                   ncol = 4, byrow = TRUE)
+  colnames(values) <- c("a", "b", "c", "empty")
+
+  result <- spseg(coords, values, bands = 0, output = "indices",
+                  comparison = "pairwise",
+                  measures = c("dissimilarity", "information", "diversity"))
+
+  expect_equal(result@indices$pairwise$d[["0"]]["a", "b"], 1,
+               tolerance = 1e-12)
+  expect_true(is.na(result@indices$pairwise$d[["0"]]["a", "empty"]))
+  expect_true(is.finite(result@indices$pairwise$r[["0"]]["a", "b"]))
+  expect_true(is.finite(result@indices$pairwise$h[["0"]]["a", "b"]))
+  expect_equal(nrow(as.data.frame(result, what = "pairwise")), 18L)
+})
+
 test_that("spseg ignores deprecated tolerance argument", {
   coords <- cbind(x = 1:4, y = 0)
   values <- matrix(c(10, 0,
@@ -237,10 +310,10 @@ test_that("spseg unified result can store local environments and indices", {
   expect_equal(result@bands, c(1, 2))
   expect_length(result@env, 2L)
   expect_equal(result@env[[2]], env2@env, tolerance = 1e-12)
-  expect_equal(result@indices$d[["2"]], legacy2$d, tolerance = 1e-12)
-  expect_equal(result@indices$r[["2"]], legacy2$r, tolerance = 1e-12)
-  expect_equal(result@indices$h[["2"]], legacy2$h, tolerance = 1e-12)
-  expect_equal(result@indices$p[["2"]], legacy2$p, tolerance = 1e-12)
+  expect_equal(result@indices$overall$d[["2"]], legacy2$d, tolerance = 1e-12)
+  expect_equal(result@indices$overall$r[["2"]], legacy2$r, tolerance = 1e-12)
+  expect_equal(result@indices$overall$h[["2"]], legacy2$h, tolerance = 1e-12)
+  expect_equal(result@indices$overall$p[["2"]], legacy2$p, tolerance = 1e-12)
 })
 
 test_that("spseg indices output avoids storing inputs and environments", {
@@ -253,10 +326,10 @@ test_that("spseg indices output avoids storing inputs and environments", {
   expect_null(result@coords)
   expect_null(result@data)
   expect_null(result@env)
-  expect_length(result@indices$h, 2L)
-  expect_length(result@indices$d, 2L)
-  expect_length(result@indices$r, 0L)
-  expect_length(result@indices$p, 0L)
+  expect_length(result@indices$overall$h, 2L)
+  expect_length(result@indices$overall$d, 2L)
+  expect_length(result@indices$overall$r, 0L)
+  expect_length(result@indices$overall$p, 0L)
   expect_equal(
     as.data.frame(result)$measure,
     rep(c("d", "h"), each = 2)

@@ -31,6 +31,16 @@ spseg_output <- function(output) {
   match.arg(output, c("legacy", "full", "indices", "localenv"))
 }
 
+spseg_comparison <- function(comparison) {
+  match.arg(comparison, c("overall", "pairwise", "both"))
+}
+
+spseg_comparison_flags <- function(comparison) {
+  comparison <- spseg_comparison(comparison)
+  c(overall = comparison %in% c("overall", "both"),
+    pairwise = comparison %in% c("pairwise", "both"))
+}
+
 spseg_bands <- function(maxdist, bands, output, x, data) {
   if (!is.null(bands) && !is.null(maxdist))
     stop("supply only one of 'bands' or 'maxdist'", call. = FALSE)
@@ -47,19 +57,21 @@ spseg_bands <- function(maxdist, bands, output, x, data) {
 spseg_indices_from_engine <- function(indices, bands) {
   if (length(indices) == 0)
     return(list())
-  if (length(indices$d) > 0)
-    names(indices$d) <- bands
-  if (length(indices$r) > 0)
-    names(indices$r) <- bands
-  if (length(indices$h) > 0)
-    names(indices$h) <- bands
-  if (length(indices$p) > 0)
-    indices$p <- setNames(indices$p, bands)
+  for (group in intersect(c("overall", "pairwise"), names(indices))) {
+    if (length(indices[[group]]$d) > 0)
+      indices[[group]]$d <- setNames(indices[[group]]$d, bands)
+    if (length(indices[[group]]$r) > 0)
+      indices[[group]]$r <- setNames(indices[[group]]$r, bands)
+    if (length(indices[[group]]$h) > 0)
+      indices[[group]]$h <- setNames(indices[[group]]$h, bands)
+    if (length(indices[[group]]$p) > 0)
+      indices[[group]]$p <- setNames(indices[[group]]$p, bands)
+  }
   indices
 }
 
 spseg_legacy_from_result <- function(result) {
-  indices <- result@indices
+  indices <- result@indices$overall
   p <- if (length(indices$p) > 0) indices$p[[1]] else
     matrix(0, nrow = 0, ncol = 0)
   env <- if (!is.null(result@env)) result@env[[1]] else result@data
@@ -69,8 +81,8 @@ spseg_legacy_from_result <- function(result) {
 }
 
 spseg_result <- function(coords, data, env, bands, indices, measures,
-                         weighting, power, normalize, proj4string, output,
-                         call) {
+                         comparison, weighting, power, normalize, proj4string,
+                         output, call) {
   keep_inputs <- !identical(output, "indices")
   SegResult(
     coords = if (keep_inputs) coords else NULL,
@@ -82,7 +94,8 @@ spseg_result <- function(coords, data, env, bands, indices, measures,
     weighting = weighting,
     power = power,
     normalize = normalize,
-    neighbors = list(type = "radius", values = bands),
+    neighbors = list(type = "radius", values = bands,
+                     comparison = comparison),
     proj4string = proj4string,
     call = call
   )
@@ -225,11 +238,64 @@ spseg_compute_r <- function(data, env, measures) {
   if ("dissimilarity" %in% measures) {
     I <- sum(ptsProp * (1 - ptsProp))
     constant <- ptsRowSum / (2 * ptsSum * I)
-    Dp <- abs(envProp - ptsProp)
+    Dp <- abs(sweep(envProp, 2, ptsProp))
     results$d <- sum(colSums(Dp * constant))
   }
 
   results
+}
+
+spseg_pairwise_compute_r <- function(data, env, measures) {
+  measures <- spseg_measures(measures)
+  m <- ncol(data)
+  empty <- matrix(NA_real_, nrow = m, ncol = m,
+                  dimnames = list(colnames(data), colnames(data)))
+  out <- list(d = list(), r = list(), h = list())
+  if (m < 2)
+    return(out)
+
+  dmat <- rmat <- hmat <- empty
+  for (a in seq_len(m - 1)) {
+    for (b in (a + 1):m) {
+      pair_total <- sum(data[, a] + data[, b])
+      if (sum(data[, a]) <= 0 || sum(data[, b]) <= 0)
+        next
+      P <- c(sum(data[, a]), sum(data[, b])) / pair_total
+      E <- -sum(spseg_xlogx(P, base = 2))
+      I <- sum(P * (1 - P))
+      D_acc <- R_acc <- H_acc <- 0
+
+      for (i in seq_len(nrow(data))) {
+        T_iab <- data[i, a] + data[i, b]
+        L_ab <- env[i, a] + env[i, b]
+        if (T_iab <= 0 || L_ab <= 0)
+          next
+        p <- c(env[i, a], env[i, b]) / L_ab
+        if ("dissimilarity" %in% measures)
+          D_acc <- D_acc + (T_iab / (2 * pair_total * I)) *
+            sum(abs(p - P))
+        if ("diversity" %in% measures)
+          R_acc <- R_acc + T_iab * sum(p * (1 - p))
+        if ("information" %in% measures)
+          H_acc <- H_acc - T_iab * sum(spseg_xlogx(p, base = 2))
+      }
+
+      if ("dissimilarity" %in% measures)
+        dmat[a, b] <- dmat[b, a] <- D_acc
+      if ("diversity" %in% measures)
+        rmat[a, b] <- rmat[b, a] <- 1 - R_acc / (pair_total * I)
+      if ("information" %in% measures)
+        hmat[a, b] <- hmat[b, a] <- 1 - H_acc / (pair_total * E)
+    }
+  }
+
+  if ("dissimilarity" %in% measures)
+    out$d <- list(dmat)
+  if ("diversity" %in% measures)
+    out$r <- list(rmat)
+  if ("information" %in% measures)
+    out$h <- list(hmat)
+  out
 }
 
 spseg_from_localenv <- function(env, measures, useC, negative.rm) {
@@ -244,18 +310,29 @@ spseg_from_localenv <- function(env, measures, useC, negative.rm) {
              env@coords, env@data, env@env, env@proj4string)
 }
 
-spseg_indices_from_localenv <- function(env, measures, useC, negative.rm) {
+spseg_indices_from_localenv <- function(env, measures, useC, negative.rm,
+                                        comparison = "overall") {
   measures <- spseg_measures(measures)
+  comparison_flags <- spseg_comparison_flags(comparison)
   prepared <- spseg_prepare_localenv(env, negative.rm)
-  results <- if (useC)
-    spseg_compute_c(prepared$data, prepared$env, measures)
-  else
-    spseg_compute_r(prepared$data, prepared$env, measures)
-  if (length(results$p) > 0)
-    results$p <- list(results$p)
-  else
-    results$p <- list()
-  results
+  overall <- list(d = numeric(), r = numeric(), h = numeric(), p = list())
+  pairwise <- list(d = list(), r = list(), h = list())
+
+  if (comparison_flags["overall"]) {
+    overall <- if (useC)
+      spseg_compute_c(prepared$data, prepared$env, measures)
+    else
+      spseg_compute_r(prepared$data, prepared$env, measures)
+    if (length(overall$p) > 0)
+      overall$p <- list(overall$p)
+    else
+      overall$p <- list()
+  }
+
+  if (comparison_flags["pairwise"])
+    pairwise <- spseg_pairwise_compute_r(prepared$data, prepared$env, measures)
+
+  list(overall = overall, pairwise = pairwise)
 }
 
 spseg_surface <- function(x, coords, data, smoothing, verbose) {

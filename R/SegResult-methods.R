@@ -26,26 +26,49 @@ as.list.SegResult <- function(x, ...) {
 }
 
 as.data.frame.SegResult <- function(x, row.names = NULL, optional = FALSE, ...,
-                                    what = c("indices", "exposure")) {
+                                    what = c("indices", "pairwise", "exposure")) {
   validObject(x)
   what <- match.arg(what)
   if (length(x@indices) == 0)
     stop("'x' does not contain segregation indices", call. = FALSE)
 
   if (what == "indices") {
+    overall <- x@indices$overall
     out <- data.frame()
-    scalar_names <- intersect(c("d", "r", "h"), names(x@indices))
+    scalar_names <- intersect(c("d", "r", "h"), names(overall))
     for (nm in scalar_names) {
-      values <- x@indices[[nm]]
+      values <- overall[[nm]]
       if (length(values) > 0)
-        out <- rbind(out, data.frame(band = x@bands, measure = nm,
+        out <- rbind(out, data.frame(comparison = "overall",
+                                     band = x@bands, measure = nm,
                                      value = values))
     }
     rownames(out) <- NULL
     return(out)
   }
 
-  p <- x@indices$p
+  if (what == "pairwise") {
+    pairwise <- x@indices$pairwise
+    out <- data.frame()
+    scalar_names <- intersect(c("d", "r", "h"), names(pairwise))
+    for (nm in scalar_names) {
+      mats <- pairwise[[nm]]
+      if (length(mats) == 0)
+        next
+      out <- rbind(out, do.call(rbind, lapply(seq_along(mats), function(i) {
+        mat <- mats[[i]]
+        idx <- which(upper.tri(mat), arr.ind = TRUE)
+        data.frame(comparison = "pairwise", band = x@bands[i], measure = nm,
+                   group_a = rownames(mat)[idx[, 1]],
+                   group_b = colnames(mat)[idx[, 2]],
+                   value = mat[idx], row.names = NULL)
+      })))
+    }
+    rownames(out) <- NULL
+    return(out)
+  }
+
+  p <- x@indices$overall$p
   if (is.null(p) || length(p) == 0)
     return(data.frame())
   out <- do.call(rbind, lapply(seq_along(p), function(i) {

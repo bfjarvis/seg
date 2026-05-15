@@ -10,6 +10,7 @@ spseg(x, data, measures = "all", sprel = NULL, maxdist = NULL,
       bands = NULL,
       weighting = c("biweight", "unweighted", "inverse", "exponential"),
       power = 3, normalize = TRUE, smoothing = NULL,
+      comparison = c("overall", "pairwise", "both"),
       output = c("legacy", "full", "indices", "localenv"),
       useC = TRUE, negative.rm = FALSE, 
       verbose = FALSE, \dots)
@@ -28,6 +29,7 @@ spatseg(env, method = "all", useC = TRUE, negative.rm = FALSE, \dots)
   \item{power}{a numeric value passed to \code{\link{localenv}} that determines the change rate of the biweight and inverse distance weighting functions. The default is 3.}
   \item{normalize}{logical. If TRUE, distances are divided by the bandwidth before local environment weights are calculated. The default is TRUE.}
   \item{smoothing}{an optional named list controlling population smoothing before local environments are constructed. If NULL, smoothing is not used. See \sQuote{Details}.}
+  \item{comparison}{a character string indicating whether to calculate \dQuote{overall} measures using all supplied groups, \dQuote{pairwise} measures for every two-group comparison, or \dQuote{both}.}
   \item{output}{a character string controlling the returned object. \dQuote{legacy} preserves the previous scalar-band \code{\link{SegSpatial-class}} return when possible. \dQuote{full} returns a \code{\link{SegResult-class}} with both local environments and indices. \dQuote{indices} returns only segregation indices and does not store coordinates, input data, or local environments. \dQuote{localenv} stores local environments but does not calculate indices.}
   \item{useC}{logical. If TRUE, calculate the segregation values in C.}
   \item{negative.rm}{logical. If TRUE, all geographic units where at least one group (i.e., column) has a negative population will be removed. If FALSE, negative values will be replaced with zero.}
@@ -41,13 +43,17 @@ spatseg(env, method = "all", useC = TRUE, negative.rm = FALSE, \dots)
 
 Local environment construction is the main spatial modelling step. When \code{spseg} is called on raw spatial data, it first constructs local environments. By default, \code{spseg} uses normalized biweight local environments with \code{power = 3}, matching the defaults in \code{\link{localenv}}. The most important local environment choices are \code{maxdist} or \code{bands} (the bandwidth/search radius), \code{weighting}, \code{power}, and \code{normalize}. See \code{\link{localenv}} for details on how these choices define local population composition.
 
-Supplying multiple \code{bands}, or setting \code{output} to anything other than \dQuote{legacy}, returns a \code{\link{SegResult-class}} object. In these cases, local environments and segregation indices are produced by a unified C engine. If \code{output = "indices"}, local environments are used only transiently inside the calculation and are not stored in the result.
+Supplying multiple \code{bands}, setting \code{comparison} to \dQuote{pairwise} or \dQuote{both}, or setting \code{output} to anything other than \dQuote{legacy}, returns a \code{\link{SegResult-class}} object. In these cases, local environments and segregation indices are produced by a unified C engine. If \code{output = "indices"}, local environments are used only transiently inside the calculation and are not stored in the result.
+
+Overall measures are stored in \code{indices$overall}. Pairwise measures, when requested, are stored in \code{indices$pairwise}. Pairwise scalar measures are returned as one symmetric matrix per bandwidth with one row and column for each population group. For pairwise calculations, each two-group comparison is evaluated within its own two-group population universe; units with no population in either group for a given pair do not contribute to that pair's accumulators. If either group has zero total population over the whole study area, the corresponding pairwise value is \code{NA}.
 
 Set \code{maxdist = 0} to compute indices without spatially weighted local environments. In this case, each local environment is a copy of the observed data for the focal unit.
 
 Population smoothing before local environment construction is also possible through the \sQuote{smoothing} argument, but this is a secondary option. If supplied, \sQuote{smoothing} should be a named list with entries corresponding to the older smoothing arguments, such as \code{smoothing = list(smoothing = "equal", nrow = 100, ncol = 100)} or \code{smoothing = list(smoothing = "kernel", nrow = 100, ncol = 100, window = window, sigma = sigma)}. Consult \code{\link{localenv}} first when choosing the spatial scale and weighting scheme for the local environment calculation.
 
 When computing the spatial information theory index, zero proportions are evaluated using the limiting value \eqn{x \log(x) = 0} as \eqn{x} approaches zero. This avoids artificial perturbation of the data and prevents \code{0 * log(0)} from producing \code{NaN}.
+
+The spatial dissimilarity index is calculated using the generalized local-environment formula from Reardon and O'Sullivan. For two groups, this is algebraically equivalent to the pairwise Duncan-Duncan expression applied to local environment proportions. With more than two groups, it is a multi-group generalization rather than a first-two-groups pairwise measure.
 }
 \value{
 An object of \code{\link{SegSpatial-class}} for legacy scalar-band calls, otherwise an object of \code{\link{SegResult-class}}.
@@ -126,4 +132,13 @@ xx5 <- spseg(
   output = "indices"
 )
 as.data.frame(xx5)
+
+xx6 <- spseg(
+  coords_df,
+  data = segdata[, 1:3],
+  bands = c(1, 2),
+  comparison = "both",
+  output = "indices"
+)
+as.data.frame(xx6, what = "pairwise")
 }
