@@ -179,9 +179,10 @@ Convert local environment counts to local Hispanic shares for mapping.
 
 ```{r local-share-data}
 local_maps <- st_as_sf(providence_env, bands = env_bands, format = "long")
-local_counts <- st_drop_geometry(local_maps)[, group_cols]
-local_maps$hispanic_share <- local_maps$Hispanic / rowSums(local_counts)
-local_maps$hispanic_share <- ifelse(rowSums(local_counts) == 0, NA,
+local_maps$TotalRaw <- providence$Total
+local_maps$Total <- rowSums(st_drop_geometry(local_maps)[, group_cols])
+local_maps$hispanic_share <- local_maps$Hispanic / local_maps$Total
+local_maps$hispanic_share <- ifelse(local_maps$TotalRaw <= 1e-12, NA,
                                     local_maps$hispanic_share)
 local_maps$band <- factor(paste0(local_maps$band, " m"),
                           levels = paste0(env_bands, " m"))
@@ -203,7 +204,7 @@ Now compute multi-group segregation indices across several bandwidths. This
 uses the unified multi-band engine and returns only the indices.
 
 ```{r multiband-indices}
-bands <- c(250, 500, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 10000)
+bands <- c(250, 500, 1000, 2000, 4000, 6000, 8000, 10000)
 
 providence_seg <- spseg(
   providence[, group_cols],
@@ -211,6 +212,7 @@ providence_seg <- spseg(
   weighting = "biweight",
   power = 3,
   normalize = TRUE,
+  neighbors="radius",
   measures = c("dissimilarity", "information", "diversity"),
   comparison = "both",
   output = "indices"

@@ -29,7 +29,7 @@ SegResult(coords = NULL, data = NULL, env = NULL, bands, indices = list(),
   \item{weighting}{character string naming the spatial weighting scheme.}
   \item{power}{numeric weighting power.}
   \item{normalize}{logical; whether distances were normalized by bandwidth.}
-  \item{neighbors}{a list describing the neighborhood strategy. Currently radius bands are supported.}
+  \item{neighbors}{a list describing the neighborhood strategy, threshold values, threshold units, and search engine. Radius neighborhoods use distance thresholds; kNN neighborhoods use population-count thresholds.}
   \item{proj4string}{coordinate reference system.}
   \item{call}{the matched call that produced the object, or NULL.}
 }

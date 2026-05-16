@@ -5,5 +5,6 @@
 # ------------------------------------------------------------------------------
 spatseg <- function(env, method = "all", useC = TRUE, negative.rm = FALSE, ...) {
   .Deprecated("spseg")
-  spseg(env, measures = method, useC = useC, negative.rm = negative.rm, ...)
+  spseg(env, measures = method, useC = useC, negative.rm = negative.rm,
+        output = "legacy", ...)
 }

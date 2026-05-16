@@ -2,10 +2,10 @@
 \alias{dissim}
 \title{Index of Dissimilarity}
 \description{
-Calculates the index of dissimilarity proposed by Duncan and Duncan (1955). If \sQuote{x} or \sQuote{nb} is given, the index is adjusted to reflect the spatial distribution of population.
+Calculates the index of dissimilarity proposed by Duncan and Duncan (1955). If \sQuote{x} is given and \sQuote{adjust = TRUE}, the index is adjusted to reflect the spatial distribution of population.
 }
 \usage{
-dissim(x, data, nb, adjust = FALSE, use_queen = FALSE, verbose = FALSE)
+dissim(x, data, adjust = FALSE, use_queen = FALSE, verbose = FALSE)
 }
 \arguments{
   \item{x}{an optional object of class \code{SpatialPolygons} or \code{SpatialPolygonsDataFrame.}}
@@ -18,11 +18,7 @@ dissim(x, data, nb, adjust = FALSE, use_queen = FALSE, verbose = FALSE)
 \details{
 \code{dissim} calculates the index of dissimilarity for \sQuote{data}. If \sQuote{data} is missing, it attempts to extract the data from \sQuote{x}. If \sQuote{x} is not given, or if it is not a valid \code{SpatialPolygonsDataFrame} object, the function stops with an error.
 
-When \sQuote{x} is given and \sQuote{adjust} is set to TRUE, the index is adjusted according to the suggestions of Morrill (1991) and Wong (1993). However, this automatic adjustment requires a number of packages to be installed on the user's system: \pkg{spdep} for Morrill's D(adj) and \pkg{spgrass6} and \pkg{rgdal} for Morrill's D(w) and D(s). Note that, for D(w) and D(s), GRASS commands should be accessible from within R.
-
-Alternatively, the index value can be adjusted using a user-specified weighting matrix \sQuote{nb}. \sQuote{nb} must be a square matrix (i.e., one that has the same number of rows and columns) but does not have to be symmetric. If \sQuote{nb} is not specified, the function calculates the traditional index of dissimilarity proposed by Duncan and Duncan (1955). 
-
-If \sQuote{nb} is a rook-based contiguity matrix standardised by the total number of neighbours, the index is adjusted as described in Morrill (1991). See the example code below and \code{nb2mat} in \pkg{spdep} for more information regarding how to construct such a matrix. For Wong's D(w) and D(s), see \url{https://sites.google.com/site/hongseongyun/seg}. Note that the sum of all elements in \sQuote{nb} should equal one.
+When \sQuote{x} is given and \sQuote{adjust} is set to TRUE, the index is adjusted according to the suggestions of Morrill (1991) and Wong (1993). This automatic adjustment uses \pkg{spdep} for Morrill's D(adj) and \pkg{terra} for Wong's D(w) and D(s), when those packages are available.
 }
 \value{
 \code{dissim} returns a list containing the following elements:

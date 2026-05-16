@@ -16,7 +16,7 @@ localenv(x, data, power = 3,
   \item{weighting}{a character string indicating the spatial weighting scheme. One of \dQuote{biweight} (default), \dQuote{unweighted}, \dQuote{inverse}, or \dQuote{exponential}.}
   \item{normalize}{logical. If TRUE, distances are divided by the bandwidth before weights are calculated so results are not affected by the coordinate measurement unit. The default is TRUE.}
   \item{maxdist}{an optional numeric value specifying a search radius for the construction of each local environment. Must be a positive value, or zero.}
-  \item{sprel}{an optional object of class \code{dist} or \code{nb}. See \sQuote{Details}.}
+  \item{sprel}{deprecated and no longer supported. Use coordinates or sf geometry instead.}
   \item{useExp}{deprecated and ignored. See \code{?localenv} for the current \sQuote{weighting} syntax.}
   \item{scale}{deprecated and ignored. See \code{?localenv} for the current \sQuote{normalize} syntax.}
   \item{\dots}{unused. The deprecated argument \code{tol} is accepted for compatibility and ignored.}
@@ -47,9 +47,7 @@ If \sQuote{maxdist} is supplied, it is used as the bandwidth and as a search rad
 
 If \sQuote{maxdist} is not provided (default), the automatic bandwidth uses the geometric mean of pairwise distances, which is less sensitive to long-distance pairs than the arithmetic mean. To avoid the cost of a full pairwise distance matrix for large data sets, the automatic bandwidth is estimated from a reproducible sample of 500 points. It is still recommended to specify \sQuote{maxdist} when a substantively meaningful bandwidth is known, or to speed up the calculation process.
 
-If a distance measure other than the Euclidean distance is required to represent spatial proximity between the points, users can provide an object of class \code{dist}, which contains the distances between all pairs of the points, through an optional argument \sQuote{sprel}. One convenient way of obtaining such information may be the use of the function \code{dist}, which offers a variety of distance measures, such as Manhattan, Canberra, and Minkowski.
-
-Or alternatively, one can supply an object of class \code{nb} to use a k-nearest neighbour averaging or polygon contiguity.
+\sQuote{sprel} inputs of class \code{dist} or \code{nb} are no longer supported. Local environments are constructed from coordinates or sf geometry using the same C++ engine used by \code{\link{spseg}}.
 }
 \value{
 An object of \code{\link{SegLocal-class}}.

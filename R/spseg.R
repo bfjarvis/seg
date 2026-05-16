@@ -12,9 +12,11 @@ spseg <- function(x,
                   weighting = c("biweight", "unweighted", "inverse", "exponential"),
                   power = 3,
                   normalize = TRUE,
+                  neighbors = c("radius", "knn"),
+                  search = c("kdtree", "brute"),
                   smoothing = NULL,
                   comparison = c("overall", "pairwise", "both"),
-                  output = c("legacy", "full", "indices", "localenv"),
+                  output = c("indices", "full", "localenv", "legacy"),
                   useC = TRUE,
                   negative.rm = FALSE,
                   verbose = FALSE,
@@ -23,6 +25,8 @@ spseg <- function(x,
   call <- match.call()
   output <- spseg_output(output)
   comparison <- spseg_comparison(comparison)
+  neighbors <- spseg_neighbors(neighbors)
+  search <- spseg_search(search)
 
   # parse inputs
   dots <- spseg_dots(...)
@@ -37,26 +41,18 @@ spseg <- function(x,
   dots <- smoothing_config$dots
   weighting <- if (missing(weighting)) "biweight" else match.arg(weighting)
   normalize <- isTRUE(normalize)
-  if (!identical(comparison, "overall") && identical(output, "legacy"))
-    output <- "full"
-
   data_arg <- if (missing(data)) NULL else data
-  bands <- spseg_bands(maxdist, bands, output, x, data_arg)
-  if (!is.null(bands) && any(!is.finite(bands)))
-    stop("'bands' must contain finite numeric values", call. = FALSE)
-  if (!is.null(bands) && any(bands < 0))
-    stop("'bands' must be greater than or equal to 0", call. = FALSE)
-  if (!is.null(bands) && length(bands) > 1 && identical(output, "legacy"))
-    output <- "full"
-
-  localenv_args <- list(power = power, weighting = weighting,
-                        normalize = normalize)
-  if (!is.null(bands) && length(bands) == 1)
-    localenv_args$maxdist <- bands
   if (!is.null(sprel))
-    localenv_args$sprel <- sprel
+    stop("'sprel' is no longer supported. Distance and neighbor-list local ",
+         "environment inputs have been deprecated; use coordinates or sf ",
+         "geometry instead.", call. = FALSE)
+  if (neighbors == "knn" && !is.null(maxdist))
+    stop("'maxdist' is not supported with kNN neighborhoods; use 'bands' for population thresholds",
+         call. = FALSE)
+  if (neighbors == "knn" && is.null(bands))
+    stop("'bands' must be supplied for count-based kNN neighborhoods",
+         call. = FALSE)
 
-  # Existing one-band workflows keep their legacy return by default.
   if (inherits(x, "SegLocal") && identical(output, "legacy"))
     return(spseg_from_localenv(x, measures, useC, negative.rm))
 
@@ -75,9 +71,20 @@ spseg <- function(x,
       comparison = comparison, weighting = character(), power = numeric(),
       normalize = logical(),
       proj4string = x@proj4string, output = output, call = call,
-      geometry = x@geometry
+      geometry = x@geometry, neighbors = "radius", search = "brute"
     ))
   }
+
+  bands <- spseg_bands(maxdist, bands, output, x, data_arg)
+  if (!is.null(bands) && any(!is.finite(bands)))
+    stop("'bands' must contain finite numeric values", call. = FALSE)
+  if (!is.null(bands) && neighbors == "radius" && any(bands < 0))
+    stop("'bands' must be greater than or equal to 0", call. = FALSE)
+  if (!is.null(bands) && neighbors == "knn" && any(bands <= 0))
+    stop("'bands' must be greater than 0 for kNN neighborhoods",
+         call. = FALSE)
+  if (!is.null(bands) && length(bands) > 1 && identical(output, "legacy"))
+    stop("'output = \"legacy\"' supports only one bandwidth", call. = FALSE)
 
   # verify data and prepare the analysis surface
   checked <- if (verbose) chksegdata(x, data) else
@@ -93,69 +100,49 @@ spseg <- function(x,
       verbose
     )
   }
+  surface$coords <- as.matrix(surface$coords)
+  surface$data <- as.matrix(surface$data)
 
-  if (!is.null(bands) && length(bands) > 1 && !is.null(sprel))
-    stop("multiple bands are not yet supported with 'sprel'", call. = FALSE)
-
-  if (!is.null(sprel) && !identical(output, "legacy")) {
-    env <- do.call(
-      localenv,
-      c(list(x = surface$coords, data = surface$data), localenv_args, dots)
-    )
-    env <- update(env, proj4string = st_crs(checked$proj4string))
-    indices <- if (identical(output, "localenv")) list() else
-      spseg_indices_from_localenv(env, measures, useC, negative.rm,
-                                  comparison = comparison)
-    if (length(indices) > 0)
-      indices <- spseg_indices_from_engine(indices, bands)
-    return(spseg_result(
-      coords = surface$coords, data = surface$data,
-      env = if (identical(output, "indices")) NULL else list(env@env),
-      bands = bands, indices = indices,
-      measures = if (length(indices) > 0) spseg_measures(measures) else
-        character(),
-      comparison = comparison, weighting = weighting, power = power,
-      normalize = normalize,
-      proj4string = st_crs(checked$proj4string), output = output,
-      call = call, geometry = checked$geometry
-    ))
+  if (is.null(bands)) {
+    bands <- if (identical(output, "legacy")) {
+      if (normalize) .geometric_mean_distance(surface$coords) else -1
+    } else {
+      default_bands(surface$coords, surface$data)
+    }
+    if (normalize && bands <= 0)
+      stop("'maxdist' must be greater than 0 when 'normalize' is TRUE",
+           call. = FALSE)
   }
 
-  # New unified result path: multiple bands, indices-only, localenv-only, or full.
-  if (!is.null(bands) && (length(bands) > 1 || !identical(output, "legacy"))) {
-    measures_to_compute <- if (identical(output, "localenv")) character() else
-      measures
-    engine <- seg_engine_coords(
-      coords = surface$coords,
-      data = surface$data,
-      bands = bands,
-      power = power,
-      weighting = weighting,
-      normalize = normalize,
-      measures = measures_to_compute,
-      comparison = comparison,
-      keep_env = !identical(output, "indices"),
-      keep_indices = !identical(output, "localenv")
-    )
-    indices <- spseg_indices_from_engine(engine$indices, bands)
-    return(spseg_result(
-      coords = surface$coords, data = surface$data, env = engine$env,
-      bands = bands, indices = indices,
-      measures = if (length(indices) > 0) spseg_measures(measures) else
-        character(),
-      comparison = comparison, weighting = weighting, power = power,
-      normalize = normalize,
-      proj4string = st_crs(checked$proj4string), output = output,
-      call = call, geometry = checked$geometry
-    ))
-  }
-
-  # Legacy path: construct one local environment object, then calculate measures.
-  env <- do.call(
-    localenv,
-    c(list(x = surface$coords, data = surface$data), localenv_args, dots)
+  measures_to_compute <- if (identical(output, "localenv")) character() else
+    measures
+  engine <- seg_engine_coords(
+    coords = surface$coords,
+    data = surface$data,
+    bands = bands,
+    power = power,
+    weighting = weighting,
+    normalize = normalize,
+    measures = measures_to_compute,
+    comparison = comparison,
+    neighbors = neighbors,
+    search = search,
+    keep_env = !identical(output, "indices"),
+    keep_indices = !identical(output, "localenv")
   )
-  env <- update(env, proj4string = st_crs(checked$proj4string))
-
-  spseg_from_localenv(env, measures, useC, negative.rm)
+  indices <- spseg_indices_from_engine(engine$indices, bands)
+  result <- spseg_result(
+    coords = surface$coords, data = surface$data, env = engine$env,
+    bands = bands, indices = indices,
+    measures = if (!identical(output, "localenv")) spseg_measures(measures) else
+      character(),
+    comparison = comparison, weighting = weighting, power = power,
+    normalize = normalize,
+    proj4string = st_crs(checked$proj4string), output = output,
+    call = call, geometry = checked$geometry, neighbors = neighbors,
+    search = search
+  )
+  if (identical(output, "legacy"))
+    return(spseg_legacy_from_result(result))
+  result
 }

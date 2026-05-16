@@ -6,6 +6,7 @@ setMethod("show", signature(object = "SegResult"), function(object) {
   cat("\n\tSpatial segregation result\n\n")
   cat("Bands                 :", length(object@bands), "\n")
   cat("Neighborhood type     :", object@neighbors$type %||% "radius", "\n")
+  cat("Neighborhood units    :", object@neighbors$units %||% "distance", "\n")
   cat("Local environments    :", if (is.null(object@env)) "not stored" else "stored", "\n")
   cat("Segregation indices   :", if (length(object@indices) == 0) "not stored" else "stored", "\n")
   if (length(object@weighting) > 0) {
