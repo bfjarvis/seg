@@ -36,9 +36,9 @@ SegResult(coords = NULL, data = NULL, env = NULL, bands, indices = list(),
 \details{
 \code{SegResult} is the unified result object used by \code{\link{spseg}} for multi-band calculations, pairwise comparisons, and non-legacy output modes. It can represent local environments only, indices only, or both. When \code{output = "indices"} in \code{\link{spseg}}, coordinates, input data, and local environments are not stored.
 
-\code{as.data.frame(x, what = "indices")} returns long-form overall scalar measures. \code{as.data.frame(x, what = "pairwise")} returns long-form pairwise scalar measures. \code{as.data.frame(x, what = "env")} returns centroid coordinates and stored local environment values. Use \code{bands}, \code{columns}, and \code{format = "wide"} or \code{format = "long"} to select and shape the environment output.
+\code{as.data.frame(x, what = "indices")} returns long-form overall scalar measures. \code{as.data.frame(x, what = "pairwise")} returns long-form pairwise scalar measures. \code{as.data.frame(x, what = "env")} returns centroid coordinates and stored local environment values. If source geometry is stored in the result, it is included as a \code{geometry} column. Use \code{bands}, \code{columns}, and \code{shape = "wide"} or \code{shape = "long"} to select and shape the environment output.
 
-\code{sf::st_as_sf(x)} converts stored local environments to an \code{sf} object. Use \code{bands} to select bandwidths, \code{columns} to select local environment columns, and \code{format = "wide"} or \code{format = "long"} to choose one row per feature or one row per feature-band combination.
+\code{sf::st_as_sf(x)} converts stored local environments to an \code{sf} object. Use \code{bands} to select bandwidths, \code{columns} to select local environment columns, and \code{shape = "wide"} or \code{shape = "long"} to choose one row per feature or one row per feature-band combination.
 }
 \value{
 An object of class \code{SegResult}.
@@ -61,7 +61,7 @@ head(as.data.frame(result, what = "env", columns = "A1"))
 
 # Long form is convenient for plotting or grouped summaries
 head(as.data.frame(result, what = "env", columns = "A1",
-                   format = "long"))
+                   shape = "long"))
 
 # Stored local environments as sf point geometry
 if (requireNamespace("ggplot2", quietly = TRUE)) {

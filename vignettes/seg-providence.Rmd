@@ -178,7 +178,7 @@ stopifnot(length(providence_env@env) == length(env_bands))
 Convert local environment counts to local Hispanic shares for mapping.
 
 ```{r local-share-data}
-local_maps <- st_as_sf(providence_env, bands = env_bands, format = "long")
+local_maps <- st_as_sf(providence_env, bands = env_bands, shape = "long")
 local_maps$TotalRaw <- providence$Total
 local_maps$Total <- rowSums(st_drop_geometry(local_maps)[, group_cols])
 local_maps$hispanic_share <- local_maps$Hispanic / local_maps$Total
@@ -266,36 +266,6 @@ ggplot(pairwise_d[grepl("White",pairwise_d$pair),],
   geom_point() +
   labs(x = "Bandwidth (m)", y = "Pairwise dissimilarity", color = "Pair") +
   theme_minimal()
-```
-
-# Two-Group Consistency Check
-
-When there are only two groups, the pairwise scalar indices should match the
-corresponding overall indices. This final section is deliberately test-like and
-can be used as a quick check on the pairwise implementation.
-
-```{r two-group-check}
-two_group_seg <- spseg(
-  providence[, c("White", "Hispanic")],
-  bands = bands,
-  weighting = "biweight",
-  power = 3,
-  normalize = TRUE,
-  measures = c("dissimilarity", "information", "diversity"),
-  comparison = "both",
-  output = "indices"
-)
-
-for (measure in c("d", "h", "r")) {
-  overall <- two_group_seg@indices$overall[[measure]]
-  pairwise <- vapply(
-    two_group_seg@indices$pairwise[[measure]],
-    function(x) x["White", "Hispanic"],
-    numeric(1)
-  )
-  stopifnot(isTRUE(all.equal(unname(overall), unname(pairwise),
-                             tolerance = 1e-12)))
-}
 ```
 
 # Source

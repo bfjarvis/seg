@@ -27,9 +27,9 @@ as.list.SegResult <- function(x, ...) {
 }
 
 st_as_sf.SegResult <- function(x, ..., bands = NULL, columns = NULL,
-                               format = c("wide", "long")) {
+                               shape = c("wide", "long")) {
   validObject(x)
-  format <- match.arg(format)
+  shape <- match.arg(shape)
   if (is.null(x@env))
     stop("'x' does not contain stored local environments", call. = FALSE)
   if (is.null(x@coords))
@@ -44,7 +44,7 @@ st_as_sf.SegResult <- function(x, ..., bands = NULL, columns = NULL,
   if (anyNA(band_index))
     stop("'bands' must match values in x@bands", call. = FALSE)
 
-  if (format == "long") {
+  if (shape == "long") {
     out <- do.call(rbind, lapply(band_index, function(i) {
       y <- .seg_env_sf(x@env[[i]], x@coords, x@geometry, x@proj4string,
                        columns = columns)
@@ -68,10 +68,10 @@ as.data.frame.SegResult <- function(x, row.names = NULL, optional = FALSE, ...,
                                     what = c("indices", "pairwise", "exposure",
                                              "env"),
                                     bands = NULL, columns = NULL,
-                                    format = c("wide", "long")) {
+                                    shape = c("wide", "long")) {
   validObject(x)
   what <- match.arg(what)
-  format <- match.arg(format)
+  shape <- match.arg(shape)
 
   if (what == "env") {
     if (is.null(x@env))
@@ -84,13 +84,15 @@ as.data.frame.SegResult <- function(x, row.names = NULL, optional = FALSE, ...,
     if (anyNA(band_index))
       stop("'bands' must match values in x@bands", call. = FALSE)
 
-    if (format == "long") {
+    if (shape == "long") {
       out <- do.call(rbind, lapply(band_index, function(i) {
         data.frame(x = x@coords[, 1], y = x@coords[, 2], band = x@bands[i],
                    .seg_env_subset(x@env[[i]], columns),
                    check.names = !optional)
       }))
       rownames(out) <- NULL
+      if (!is.null(x@geometry))
+        out$geometry <- rep(x@geometry, times = length(band_index))
       if (!is.null(row.names))
         rownames(out) <- row.names
       return(out)
@@ -104,6 +106,8 @@ as.data.frame.SegResult <- function(x, row.names = NULL, optional = FALSE, ...,
     }))
     out <- data.frame(x = x@coords[, 1], y = x@coords[, 2], env,
                       check.names = !optional)
+    if (!is.null(x@geometry))
+      out$geometry <- x@geometry
     if (!is.null(row.names))
       rownames(out) <- row.names
     return(out)

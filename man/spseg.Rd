@@ -143,7 +143,7 @@ xx5 <- spseg(
 )
 as.data.frame(xx5)
 head(as.data.frame(xx5, what = "env", columns = "A1"))
-head(as.data.frame(xx5, what = "env", columns = "A1", format = "long"))
+head(as.data.frame(xx5, what = "env", columns = "A1", shape = "long"))
 
 xx6 <- spseg(
   coords_df,
@@ -164,5 +164,5 @@ xx7 <- spseg(
   weighting = "unweighted",
   output = "full"
 )
-head(as.data.frame(xx7, what = "env", format = "long"))
+head(as.data.frame(xx7, what = "env", shape = "long"))
 }

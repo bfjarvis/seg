@@ -478,7 +478,7 @@ test_that("st_as_sf compiles selected SegResult local environments", {
 
   wide <- sf::st_as_sf(result, bands = c(0, 2), columns = "a")
   long <- sf::st_as_sf(result, bands = c(0, 2), columns = "a",
-                       format = "long")
+                       shape = "long")
 
   expect_s3_class(wide, "sf")
   expect_equal(names(sf::st_drop_geometry(wide)), c("bw_0_a", "bw_2_a"))
@@ -488,6 +488,20 @@ test_that("st_as_sf compiles selected SegResult local environments", {
   expect_equal(nrow(long), nrow(x) * 2)
   expect_equal(sort(unique(long$band)), c(0, 2))
   expect_equal(names(sf::st_drop_geometry(long)), c("a", "band"))
+
+  wide_df <- as.data.frame(result, what = "env", bands = c(0, 2),
+                           columns = "a")
+  long_df <- as.data.frame(result, what = "env", bands = c(0, 2),
+                           columns = "a", shape = "long")
+
+  expect_true("geometry" %in% names(wide_df))
+  expect_s3_class(wide_df$geometry, "sfc")
+  expect_equal(length(wide_df$geometry), nrow(x))
+  expect_equal(sf::st_crs(wide_df$geometry), sf::st_crs(x))
+  expect_true("geometry" %in% names(long_df))
+  expect_s3_class(long_df$geometry, "sfc")
+  expect_equal(length(long_df$geometry), nrow(x) * 2)
+  expect_equal(sf::st_crs(long_df$geometry), sf::st_crs(x))
 })
 
 test_that("as.data.frame compiles selected SegResult local environments", {
@@ -498,7 +512,7 @@ test_that("as.data.frame compiles selected SegResult local environments", {
   wide <- as.data.frame(result, what = "env", bands = c(0, 2),
                         columns = "C1")
   long <- as.data.frame(result, what = "env", bands = c(0, 2),
-                        columns = "C1", format = "long")
+                        columns = "C1", shape = "long")
 
   expect_equal(names(wide), c("x", "y", "bw_0_C1", "bw_2_C1"))
   expect_equal(nrow(wide), nrow(toy$coords))
