@@ -253,46 +253,6 @@ spseg_result <- function(coords, data, env, bands, indices, measures,
   )
 }
 
-spseg_smoothing_config <- function(smoothing, dots) {
-  old_names <- c("nrow", "ncol", "nocol", "window", "sigma")
-  supplied_old <- intersect(names(dots), old_names)
-  deprecated <- character()
-
-  if (is.null(smoothing)) {
-    config <- list(smoothing = "none")
-  } else if (is.list(smoothing)) {
-    config <- smoothing
-  } else {
-    config <- list(smoothing = smoothing)
-    deprecated <- c(deprecated, "smoothing")
-  }
-
-  if (length(supplied_old) > 0) {
-    deprecated <- c(deprecated, supplied_old)
-    for (nm in supplied_old) {
-      config[[nm]] <- dots[[nm]]
-      dots[[nm]] <- NULL
-    }
-  }
-
-  if (length(deprecated) > 0)
-    warning("Deprecated smoothing argument(s) ignored as top-level inputs: ",
-            paste(unique(deprecated), collapse = ", "),
-            ". Use smoothing = list(...) instead.", call. = FALSE)
-
-  if (is.null(config$smoothing))
-    config$smoothing <- "none"
-  if (!is.null(config$nocol) && is.null(config$ncol))
-    config$ncol <- config$nocol
-  config$nocol <- NULL
-  if (is.null(config$nrow))
-    config$nrow <- 100
-  if (is.null(config$ncol))
-    config$ncol <- 100
-
-  list(config = config, dots = dots)
-}
-
 spseg_prepare_localenv <- function(env, negative.rm) {
   dd <- env@data
   ee <- env@env
@@ -369,34 +329,4 @@ spseg_from_localenv <- function(env, measures, useC, negative.rm) {
 
   SegSpatial(results$d, results$r, results$h, p,
              env@coords, env@data, env@env, env@proj4string)
-}
-
-spseg_surface <- function(x, coords, data, smoothing, verbose) {
-  nrow <- smoothing$nrow
-  ncol <- smoothing$ncol
-  window <- smoothing$window
-  sigma <- smoothing$sigma
-  smoothing <- smoothing$smoothing
-  smoothing <- match.arg(smoothing, c("none", "kernel", "equal"),
-                         several.ok = FALSE)
-  if (smoothing == "none")
-    return(list(coords = coords, data = data))
-
-  if (smoothing == "equal")
-    return(surface.equal(x, data, nrow, ncol, verbose))
-
-  if (is.null(window)) {
-    x_range <- range(coords[, 1])
-    y_range <- range(coords[, 2])
-    window <- matrix(c(x_range[1], y_range[1],
-                       x_range[1], y_range[2],
-                       x_range[2], y_range[2],
-                       x_range[2], y_range[1]),
-                     ncol = 2, byrow = TRUE)
-  }
-
-  if (is.null(sigma))
-    sigma <- min(bw.nrd(coords[, 1]), bw.nrd(coords[, 2]))
-
-  surface.kernel(coords, data, sigma, nrow, ncol, window, verbose)
 }

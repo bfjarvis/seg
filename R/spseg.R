@@ -14,6 +14,7 @@ spseg <- function(x,
                   normalize = TRUE,
                   neighbors = c("radius", "knn"),
                   search = c("kdtree", "brute"),
+                  surface = c("raw", "grid", "pycno"),
                   smoothing = NULL,
                   comparison = c("overall", "pairwise", "both"),
                   output = c("indices", "full", "localenv", "legacy"),
@@ -27,6 +28,7 @@ spseg <- function(x,
   comparison <- spseg_comparison(comparison)
   neighbors <- spseg_neighbors(neighbors)
   search <- spseg_search(search)
+  surface <- spseg_surface_method(surface)
 
   # parse inputs
   dots <- spseg_dots(...)
@@ -37,8 +39,9 @@ spseg <- function(x,
       measures <- dots$method
     dots$method <- NULL
   }
-  smoothing_config <- spseg_smoothing_config(smoothing, dots)
-  dots <- smoothing_config$dots
+  surface_config <- spseg_surface_config(surface, smoothing, dots)
+  surface <- surface_config$surface
+  dots <- surface_config$dots
   weighting <- if (missing(weighting)) "biweight" else match.arg(weighting)
   normalize <- isTRUE(normalize)
   data_arg <- if (missing(data)) NULL else data
@@ -89,25 +92,22 @@ spseg <- function(x,
   # verify data and prepare the analysis surface
   checked <- if (verbose) chksegdata(x, data) else
     suppressMessages(chksegdata(x, data))
-  surface <- if (identical(smoothing_config$config$smoothing, "none")) {
-    list(coords = checked$coords, data = checked$data)
-  } else {
-    spseg_surface(
-      x,
-      checked$coords,
-      checked$data,
-      smoothing_config$config,
-      verbose
-    )
-  }
-  surface$coords <- as.matrix(surface$coords)
-  surface$data <- as.matrix(surface$data)
+  pop_surface <- spseg_surface(
+    x = x,
+    coords = checked$coords,
+    data = checked$data,
+    surface = surface,
+    args = dots,
+    verbose = verbose
+  )
+  pop_surface$coords <- as.matrix(pop_surface$coords)
+  pop_surface$data <- as.matrix(pop_surface$data)
 
   if (is.null(bands)) {
     bands <- if (identical(output, "legacy")) {
-      if (normalize) .geometric_mean_distance(surface$coords) else -1
+      if (normalize) .geometric_mean_distance(pop_surface$coords) else -1
     } else {
-      default_bands(surface$coords, surface$data)
+      default_bands(pop_surface$coords, pop_surface$data)
     }
     if (normalize && bands <= 0)
       stop("'maxdist' must be greater than 0 when 'normalize' is TRUE",
@@ -117,8 +117,8 @@ spseg <- function(x,
   measures_to_compute <- if (identical(output, "localenv")) character() else
     measures
   engine <- seg_engine_coords(
-    coords = surface$coords,
-    data = surface$data,
+    coords = pop_surface$coords,
+    data = pop_surface$data,
     bands = bands,
     power = power,
     weighting = weighting,
@@ -132,14 +132,17 @@ spseg <- function(x,
   )
   indices <- spseg_indices_from_engine(engine$indices, bands)
   result <- spseg_result(
-    coords = surface$coords, data = surface$data, env = engine$env,
+    coords = pop_surface$coords, data = pop_surface$data, env = engine$env,
     bands = bands, indices = indices,
     measures = if (!identical(output, "localenv")) spseg_measures(measures) else
       character(),
     comparison = comparison, weighting = weighting, power = power,
     normalize = normalize,
     proj4string = st_crs(checked$proj4string), output = output,
-    call = call, geometry = checked$geometry, neighbors = neighbors,
+    call = call,
+    geometry = if (identical(surface, "raw")) checked$geometry else
+      pop_surface$geometry,
+    neighbors = neighbors,
     search = search
   )
   if (identical(output, "legacy"))

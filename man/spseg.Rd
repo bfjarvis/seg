@@ -11,6 +11,7 @@ spseg(x, data, measures = "all", sprel = NULL, maxdist = NULL,
       weighting = c("biweight", "unweighted", "inverse", "exponential"),
       power = 3, normalize = TRUE, neighbors = c("radius", "knn"),
       search = c("kdtree", "brute"),
+      surface = c("raw", "grid", "pycno"),
       smoothing = NULL,
       comparison = c("overall", "pairwise", "both"),
       output = c("indices", "full", "localenv", "legacy"),
@@ -32,13 +33,14 @@ spatseg(env, method = "all", useC = TRUE, negative.rm = FALSE, \dots)
   \item{normalize}{logical. If TRUE, distances are divided by the bandwidth before local environment weights are calculated. The default is TRUE.}
   \item{neighbors}{a character string indicating the neighborhood strategy. \dQuote{radius} uses distance bandwidths/search radii and is the default. \dQuote{knn} uses count-based adaptive neighborhoods; in this mode \code{bands} gives population-count thresholds rather than distances.}
   \item{search}{a character string indicating the neighbor-search backend used by the unified engine. \dQuote{kdtree} uses the nanoflann kd-tree backend and is the default. \dQuote{brute} computes all centroid distances directly, which is useful for validation and can be competitive when neighborhoods are very dense.}
-  \item{smoothing}{an optional named list controlling population smoothing before local environments are constructed. If NULL, smoothing is not used. See \sQuote{Details}.}
+  \item{surface}{a character string indicating how the population surface is constructed before local environments are calculated. \dQuote{raw} uses the observed input support, \dQuote{grid} redistributes areal counts over a square grid, and \dQuote{pycno} applies pycnophylactic interpolation after constructing the grid.}
+  \item{smoothing}{deprecated compatibility argument. Use \code{surface} instead and pass surface-construction options through \dots.}
   \item{comparison}{a character string indicating whether to calculate \dQuote{overall} measures using all supplied groups, \dQuote{pairwise} measures for every two-group comparison, or \dQuote{both}.}
   \item{output}{a character string controlling the returned object. \dQuote{indices} is the default and returns only segregation indices across the chosen or default bands without storing coordinates, input data, or local environments. \dQuote{full} returns a \code{\link{SegResult-class}} with both local environments and indices. \dQuote{localenv} stores local environments but does not calculate indices. \dQuote{legacy} preserves the previous scalar-band \code{\link{SegSpatial-class}} return when explicitly requested.}
   \item{useC}{deprecated logical retained for compatibility. Segregation calculations now use the C++ engine regardless of this value.}
   \item{negative.rm}{logical. If TRUE, all geographic units where at least one group (i.e., column) has a negative population will be removed. If FALSE, negative values will be replaced with zero.}
   \item{verbose}{logical. If TRUE, print the current stage of the computation and time spent on each job to the screen.}
-  \item{\dots}{additional arguments passed to \code{\link{localenv}} when \sQuote{x} is raw spatial data. Deprecated top-level smoothing arguments \code{nrow}, \code{ncol}, \code{nocol}, \code{window}, and \code{sigma} are accepted for compatibility with a warning and folded into \sQuote{smoothing}. The deprecated arguments \code{method} and \code{tol} are accepted for compatibility; \code{method} is used as \code{measures} when \code{measures} is not supplied, and \code{tol} is ignored.}
+  \item{\dots}{additional arguments passed to population-surface construction, such as \code{cellsize}, \code{celldim}, \code{nrow}, \code{ncol}, \code{r}, or \code{converge}. The deprecated arguments \code{method} and \code{tol} are accepted for compatibility; \code{method} is used as \code{measures} when \code{measures} is not supplied, and \code{tol} is ignored.}
 }
 \details{
 \code{spseg} computes the set of spatial segregation measures proposed by Reardon and O'Sullivan. It can be called directly on a \code{\link{SegLocal-class}} object, or on raw spatial data from which \code{spseg} first constructs local environments.
@@ -59,7 +61,7 @@ When \code{neighbors = "knn"}, \code{bands} is interpreted as population-count t
 
 The \code{search} argument controls how candidate neighbours are found in the unified engine. The default \code{search = "kdtree"} uses a kd-tree for exact neighbor lookup. \code{search = "brute"} uses direct all-pairs distance evaluation and is mainly intended as a transparent validation backend or for cases where kd-tree overhead is not worthwhile.
 
-Population smoothing before local environment construction is also possible through the \sQuote{smoothing} argument, but this is a secondary option. If supplied, \sQuote{smoothing} should be a named list with entries corresponding to the older smoothing arguments, such as \code{smoothing = list(smoothing = "equal", nrow = 100, ncol = 100)} or \code{smoothing = list(smoothing = "kernel", nrow = 100, ncol = 100, window = window, sigma = sigma)}. Consult \code{\link{localenv}} first when choosing the spatial scale and weighting scheme for the local environment calculation.
+The \code{surface} argument controls population-surface construction before local environments are calculated. \code{surface = "raw"} uses the observed input support directly. \code{surface = "grid"} redistributes areal counts over a square grid before calculating local environments. \code{surface = "pycno"} first constructs a grid and then uses pycnophylactic interpolation, via the suggested \pkg{pycno} package, to smooth the gridded population surface while preserving original areal totals. Additional surface-construction options are passed through \dots.
 
 When computing the spatial information theory index, zero proportions are evaluated using the limiting value \eqn{x \log(x) = 0} as \eqn{x} approaches zero. This avoids artificial perturbation of the data and prevents \code{0 * log(0)} from producing \code{NaN}.
 
@@ -84,7 +86,7 @@ Reardon, S. F. and O'Sullivan, D. (2004) Measures of spatial segregation. \emph{
 Reardon, S. F., Farrell, C. R., Matthews, S. A., O'Sullivan, D., Bischoff, K., and Firebaugh, G. (2009) Race and space in the 1990s: Changes in the geographic scale of racial residential segregation, 1990-2000. \emph{Social Science Research}, \bold{38}, 55-70.
 }
 \seealso{
-\code{\link{SegSpatial-class}}, \code{\link{localenv}}, \code{kernel2d}
+\code{\link{SegSpatial-class}}, \code{\link{localenv}}
 }
 \examples{
 # uses the idealised landscapes in 'segdata'
@@ -125,11 +127,13 @@ xx3 <- spseg(
 )
 as.list(xx3)
 
-# optional smoothing is supplied as a named list
+# optional square-grid surface construction
 xx4 <- spseg(
   grd_sf,
   data = test.df,
-  smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+  surface = "grid",
+  nrow = 10,
+  ncol = 10,
   maxdist = 2
 )
 as.list(xx4)

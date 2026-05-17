@@ -373,7 +373,7 @@ test_that("spseg defaults to sampled bands and indices output", {
   expect_length(result@indices$overall$d, 5L)
 })
 
-test_that("spseg accepts smoothing as a named list", {
+test_that("spseg constructs grid population surfaces", {
   data(segdata)
   geom <- sf::st_polygon(list(rbind(c(0, 0), c(10, 0), c(10, 10),
                                     c(0, 10), c(0, 0)))) |>
@@ -383,7 +383,9 @@ test_that("spseg accepts smoothing as a named list", {
   result <- spseg(
     grid_sf,
     data = segdata[, 1:2],
-    smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+    surface = "grid",
+    nrow = 10,
+    ncol = 10,
     maxdist = 2,
     output = "legacy"
   )
@@ -405,10 +407,33 @@ test_that("spseg accommodates deprecated top-level smoothing arguments", {
     "Deprecated smoothing"
   )
   new <- spseg(grid_sf, data = segdata[, 1:2],
-               smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+               surface = "grid", nrow = 10, ncol = 10,
                maxdist = 2, output = "legacy")
 
   expect_equal(old@env, new@env, tolerance = 1e-12)
+})
+
+test_that("spseg can construct pycnophylactic population surfaces", {
+  testthat::skip_if_not_installed("pycno")
+
+  geom <- sf::st_make_grid(
+    sf::st_as_sfc(sf::st_bbox(c(xmin = 0, ymin = 0, xmax = 2, ymax = 2))),
+    n = c(2, 2)
+  )
+  values <- matrix(c(10, 0,
+                     0, 10,
+                     5, 5,
+                     3, 7),
+                   ncol = 2, byrow = TRUE,
+                   dimnames = list(NULL, c("a", "b")))
+  x <- sf::st_sf(a = values[, 1], b = values[, 2], geometry = geom)
+
+  result <- spseg(x, bands = 1, surface = "pycno", celldim = 0.5,
+                  converge = 1, output = "localenv")
+
+  expect_s4_class(result, "SegResult")
+  expect_gt(nrow(result@data), nrow(x))
+  expect_equal(colnames(result@data), c("a", "b"))
 })
 
 test_that("SegLocal objects support spplot examples", {

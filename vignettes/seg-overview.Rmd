@@ -174,48 +174,28 @@ env_sf <- localenv(grid_sf[, c("A1", "A2")], maxdist = 2)
 head(env_sf@env)
 ```
 
-# Smoothing
+# Population Surfaces
 
 The `spseg()` wrapper can compute segregation measures after constructing a
-smoothed population surface. The `"equal"` option redistributes polygon
-population values over a regular grid.
+population surface. The default `surface = "raw"` uses the observed input
+support directly. `surface = "grid"` redistributes polygon population values
+over a square grid before local environments are calculated.
 
-```{r equal-smoothing}
+```{r grid-surface}
 spseg(
   grid_sf,
   data = pattern_a,
-  smoothing = list(smoothing = "equal", nrow = 10, ncol = 10),
+  surface = "grid",
+  nrow = 10,
+  ncol = 10,
   maxdist = 2
 ) |>
   as.list()
 ```
 
-The `"kernel"` option uses `splancs::kernel2d()` internally.
-
-```{r kernel-smoothing}
-window <- matrix(
-  c(0, 0,
-    0, 10,
-    10, 10,
-    10, 0),
-  ncol = 2,
-  byrow = TRUE
-)
-
-spseg(
-  coords,
-  data = pattern_a,
-  smoothing = list(
-    smoothing = "kernel",
-    nrow = 10,
-    ncol = 10,
-    window = window,
-    sigma = 1
-  ),
-  maxdist = 2
-) |>
-  as.list()
-```
+`surface = "pycno"` uses pycnophylactic interpolation to smooth the grid while
+preserving the original areal totals. This option requires the suggested
+`pycno` package.
 
 # Optional Spatial Adjustments
 
