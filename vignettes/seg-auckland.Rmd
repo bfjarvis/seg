@@ -23,7 +23,7 @@ are included as external package files so the examples can be run after the
 package is installed.
 
 ```{r setup}
-library(seg)
+devtools::load_all()
 library(sf)
 library(ggplot2)
 ```
@@ -91,7 +91,7 @@ ggplot(auck) +
 ```{r localenv}
 auck_seg <- spseg(
   auck[, c("Korean", "Non_Korean")],
-  bands=c(1,500,2500,5000),
+  bands=c(1,1500,3000,4500,6000,9000),
   search="kdtree",
   neighbors="radius",
   measures="all",
@@ -102,200 +102,60 @@ auck_seg
 
 # Plot Local Environment Data
 
-`as.data.frame()` methods are available. Specifying `what='env'` and `shape='long'` returns the local environments in a tidy data.frame.
+`as.data.frame()` methods are available. Specifying `what='env'` and `shape='long'` returns the local environments in a tidy data.frame. 
 
 ```{r localenv-map}
 auck_env<-as.data.frame(auck_seg,what="env",shape="long") 
-auck_env$Total<-colSums(auck_env[,c('Korean','Non_Korean')])
-auck_env$Korean_Share <- auck_env$Korean/auck_env$Total
+auck_env$Total<-rowSums(auck_env[,c('Korean','Non_Korean')])
+auck_env$Korean_Share <- auck_env$Korean/auck_env$Total+0.001
 
 ggplot(auck_env) + 
-  geom_sf(aes(fill = Korean_Share), color = NA) +
-  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
-  facet_wrap(vars(band)) +
+  geom_sf(aes(geometry=geometry,fill = Korean_Share), color = NA) +
+  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%"), transform='log2') +
+  facet_wrap(vars(band),ncol=2,
+             labeller=as_labeller(
+               function(x) paste('Bandwidth =',x,'m'))) +
   labs(fill = "Local Korean share") +
-  theme_minimal()
+  theme_void()
 ```
 
-The two maps can also be compared directly.
-
-```{r raw-vs-local}
-plot_data <- rbind(
-  data.frame(
-    geometry = st_geometry(auck),
-    share = auck$korean_share,
-    type = "Raw area-unit share"
-  ),
-  data.frame(
-    geometry = st_geometry(auck_env_sf),
-    share = auck_env_sf$local_korean_share,
-    type = "Local environment share"
-  )
-)
-plot_data <- st_as_sf(plot_data)
-
-ggplot(plot_data) +
-  geom_sf(aes(fill = share), color = NA) +
-  facet_wrap(~ type) +
-  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
-  labs(fill = "Korean share") +
-  theme_minimal()
-```
 
 # Bandwidth Sensitivity
 
 Spatial segregation measures can change with the geographic scale used to
-construct local environments. The following example calculates local
-environments for bandwidths from 500 metres to 10 kilometres in 500 metre
-increments.
+construct local environments. When we calculated the segregation measures, we already specified multiple bandwidths, we can extract the corresponding segregation measures using `as.data.frame()` with `what='indices'`. If we want the data in a tidy long format data frame, we can further specify `shape='long'`.
 
 ```{r bandwidth-sequence}
-bandwidths <- seq(500, 10000, by = 500)
-
-bandwidth_result <- spseg(
-  auck[, c("Korean", "Non_Korean")],
-  bands = bandwidths,
-  output = "full"
-)
+head(auck_ind<-as.data.frame(auck_seg,what="indices",shape="long"))
 ```
 
-First, convert a subset of the stored local environments to an `sf` object for
-faceted mapping.
-
-```{r bandwidth-map-data}
-map_bandwidths <- c(500, 2000, 5000, 10000)
-bandwidth_maps <- st_as_sf(bandwidth_result, bands = map_bandwidths,
-                           shape = "long")
-bandwidth_counts <- st_drop_geometry(bandwidth_maps)[, c("Korean",
-                                                         "Non_Korean")]
-bandwidth_maps$local_korean_share <- bandwidth_maps$Korean /
-  rowSums(bandwidth_counts)
-bandwidth_maps$bandwidth <- paste0(bandwidth_maps$band / 1000, " km")
-
-bandwidth_maps$bandwidth <- factor(
-  bandwidth_maps$bandwidth,
-  levels = paste0(map_bandwidths / 1000, " km")
-)
-```
-
-```{r bandwidth-map, fig.height=6}
-ggplot(bandwidth_maps) +
-  geom_sf(aes(fill = local_korean_share), color = NA) +
-  facet_wrap(~ bandwidth, ncol = 2) +
-  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%")) +
-  labs(fill = "Local Korean share") +
-  theme_minimal()
-```
-
-Next, calculate the segregation measures at every bandwidth.
-
-```{r bandwidth-measures}
-overall_measures <- as.data.frame(bandwidth_result, what = "indices")
-overall_measures <- reshape(
-  overall_measures[, c("band", "measure", "value")],
-  idvar = "band",
-  timevar = "measure",
-  direction = "wide"
-)
-names(overall_measures) <- sub("^value\\.", "", names(overall_measures))
-
-exposure_measures <- as.data.frame(bandwidth_result, what = "exposure")
-korean_isolation <- exposure_measures[
-  exposure_measures$from_group == "Korean" &
-    exposure_measures$to_group == "Korean",
-  c("band", "exposure")
-]
-
-bandwidth_measures <- merge(overall_measures, korean_isolation, by = "band")
-names(bandwidth_measures)[names(bandwidth_measures) == "band"] <- "bandwidth_m"
-names(bandwidth_measures)[names(bandwidth_measures) == "d"] <- "dissimilarity"
-names(bandwidth_measures)[names(bandwidth_measures) == "r"] <- "diversity"
-names(bandwidth_measures)[names(bandwidth_measures) == "h"] <- "information"
-names(bandwidth_measures)[names(bandwidth_measures) == "exposure"] <-
-  "korean_isolation"
-bandwidth_measures$bandwidth_km <- bandwidth_measures$bandwidth_m / 1000
-
-head(bandwidth_measures)
-```
-
-Plotting each measure against bandwidth gives a scale profile of segregation.
+Then we can plot the resulting segregation curves:
 
 ```{r bandwidth-curve}
-curve_data <- reshape(
-  bandwidth_measures,
-  varying = c("dissimilarity", "diversity", "information", "korean_isolation"),
-  v.names = "value",
-  timevar = "measure",
-  times = c(
-    "Spatial dissimilarity",
-    "Relative diversity",
-    "Information theory",
-    "Korean isolation"
-  ),
-  idvar = "bandwidth_km",
-  direction = "long"
-)
-
-ggplot(curve_data, aes(x = bandwidth_km, y = value)) +
+auck_ind |> 
+ggplot(aes(x = band, y = value)) +
   geom_line() +
   geom_point(size = 1.5) +
   facet_wrap(~ measure, scales = "free_y") +
-  labs(x = "Bandwidth (km)", y = "Measure value") +
+  labs(x = "Bandwidth (m)", y = "Measure value") +
   theme_minimal()
 ```
 
-# Segregation Measures
+The exposure/isolation values are a bit more complited, but can be returned in long form using the `what='exposure'` option in `as.data.frame()`.
 
-The traditional index of dissimilarity is calculated from the raw population
-counts.
+```{r exposure-curve}
+head(auck_exp<-as.data.frame(auck_seg, what = "exposure") )
 
-```{r dissimilarity}
-group_data <- sf::st_drop_geometry(auck[, c("Korean", "Non_Korean")])
-
-dissim(data = group_data)
+auck_exp |> 
+ggplot(aes(x = band, y = exposure,color=from_group)) +
+  geom_line() +
+  geom_point(size = 1.5) +
+  scale_y_continuous(labels=function(x) { format(100*x,digits=2) }) +
+  facet_wrap(~ to_group, scales = "free_y",
+             labeller=as_labeller(
+               function(x) { paste("%",x) })) +
+  labs(x = "Bandwidth (m)", y = "%",color='focal group') +
+  theme_minimal()
 ```
 
-White's spatial proximity index can use the same `sf` object.
-
-```{r proximity}
-isp(auck[, c("Korean", "Non_Korean")])
-```
-
-Reardon and O'Sullivan's spatial measures can be calculated from the local
-environment object.
-
-```{r spatial-measures}
-spatial_measures <- spseg(auck_env)
-
-as.data.frame(spatial_measures, what = "indices")
-```
-
-For a compact comparison:
-
-```{r measure-summary}
-spatial_indices <- as.data.frame(spatial_measures, what = "indices")
-spatial_values <- setNames(spatial_indices$value, spatial_indices$measure)
-
-data.frame(
-  measure = c(
-    "Dissimilarity",
-    "Spatial proximity",
-    "Spatial dissimilarity",
-    "Relative diversity",
-    "Information theory"
-  ),
-  value = c(
-    dissim(data = group_data)$d,
-    isp(auck[, c("Korean", "Non_Korean")]),
-    spatial_values["d"],
-    spatial_values["r"],
-    spatial_values["h"]
-  )
-)
-```
-
-The exposure/isolation matrix can be returned in long form.
-
-```{r exposure}
-as.data.frame(spatial_measures, what = "exposure")
 ```
