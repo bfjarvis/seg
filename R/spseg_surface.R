@@ -67,6 +67,8 @@ spseg_surface_grid <- function(x, data, args, verbose) {
   xx <- seq(bbox$xmin, bbox$xmax, length.out = grid_dims$ncol)
   yy <- seq(bbox$ymin, bbox$ymax, length.out = grid_dims$nrow)
   coords <- expand.grid(x = xx, y = yy)
+  cell_width <- if (length(xx) > 1) diff(xx)[1] else spseg_surface_celldim(x, args)
+  cell_height <- if (length(yy) > 1) diff(yy)[1] else cell_width
 
   points <- st_as_sf(coords, coords = c("x", "y"), crs = st_crs(x))
   polygon_ids <- st_intersects(points, x, sparse = FALSE)
@@ -77,6 +79,9 @@ spseg_surface_grid <- function(x, data, args, verbose) {
   keep <- !is.na(polygon_ids)
   coords <- coords[keep, , drop = FALSE]
   polygon_ids <- polygon_ids[keep]
+  spseg_surface_warn_missing_zones(polygon_ids, data, "grid")
+  geometry <- spseg_surface_cell_geometry(coords, st_crs(x), cell_width,
+                                          cell_height)
 
   cell_per_polygon <- table(polygon_ids)
   values <- matrix(NA_real_, nrow = nrow(coords), ncol = ncol(data))
@@ -92,16 +97,12 @@ spseg_surface_grid <- function(x, data, args, verbose) {
 
   colnames(coords) <- c("x", "y")
   colnames(values) <- colnames(data)
-  list(coords = coords, data = values, geometry = NULL, id = polygon_ids)
+  list(coords = coords, data = values, geometry = geometry, id = polygon_ids)
 }
 
 spseg_surface_pycno <- function(x, data, args, verbose) {
-  if (!requireNamespace("pycno", quietly = TRUE))
-    stop("surface = \"pycno\" requires the suggested package 'pycno'.",
-         call. = FALSE)
-
-  celldim <- spseg_surface_celldim(x, args)
-  r <- args$r %||% 0.2
+  grid_dims <- spseg_surface_grid_dims(x, args)
+  max_iter <- args$max_iter %||% 1000
   converge <- args$converge %||% 3
 
   if (verbose) {
@@ -109,20 +110,26 @@ spseg_surface_pycno <- function(x, data, args, verbose) {
     message("spseg_surface_pycno: pycnophylactic interpolation ...")
   }
 
-  x_sp <- as(x, "Spatial")
-  grids <- lapply(seq_len(ncol(data)), function(i) {
-    if (verbose)
-      message("spseg_surface_pycno: processing column ", i)
-    pycno::pycno(x_sp, data[, i], celldim = celldim, r = r,
-                 converge = converge, verbose = verbose)
-  })
+  grid <- spseg_surface_grid_index(x, grid_dims)
+  coords <- grid$coords
+  zone_ids <- grid$zone_ids
+  spseg_surface_warn_missing_zones(zone_ids, data, "pycno")
+  values <- seg_pycno_cpp(
+    zone_ids = zone_ids,
+    pops = data,
+    nx = grid_dims$ncol,
+    ny = grid_dims$nrow,
+    max_iter = max_iter,
+    converge = converge
+  )
 
-  coords <- sp::coordinates(grids[[1]])
-  values <- do.call(cbind, lapply(grids, function(grid) grid@data$dens))
-  keep <- rowSums(!is.na(values)) > 0
+  keep <- !is.na(zone_ids)
   coords <- coords[keep, , drop = FALSE]
   values <- values[keep, , drop = FALSE]
   values[is.na(values)] <- 0
+  geometry <- spseg_surface_cell_geometry(coords, st_crs(x),
+                                          grid$cell_width,
+                                          grid$cell_height)
   colnames(coords) <- c("x", "y")
   colnames(values) <- colnames(data)
 
@@ -131,7 +138,44 @@ spseg_surface_pycno <- function(x, data, args, verbose) {
     message("spseg_surface_pycno: done! [", tt, " seconds]")
   }
 
-  list(coords = coords, data = values, geometry = NULL)
+  list(coords = coords, data = values, geometry = geometry)
+}
+
+spseg_surface_polygon_ids <- function(coords, x) {
+  points <- st_as_sf(data.frame(x = coords[, 1], y = coords[, 2]),
+                     coords = c("x", "y"), crs = st_crs(x))
+  hits <- st_intersects(points, x, sparse = FALSE)
+  apply(hits, 1, function(z) {
+    if (any(z)) which(z)[1] else NA_integer_
+  })
+}
+
+spseg_surface_warn_missing_zones <- function(zone_ids, data, surface) {
+  represented <- unique(zone_ids[!is.na(zone_ids)])
+  positive <- which(rowSums(data) > 0)
+  missing <- setdiff(positive, represented)
+  if (length(missing) > 0) {
+    warning(
+      "surface = \"", surface, "\" did not create grid cells for ",
+      length(missing), " non-empty source polygon(s). ",
+      "The grid is too coarse to preserve the input population surface; ",
+      "use a smaller 'cellsize'/'celldim'.",
+      call. = FALSE
+    )
+  }
+}
+
+spseg_surface_grid_index <- function(x, grid_dims) {
+  bbox <- st_bbox(x)
+  xx <- seq(bbox$xmin, bbox$xmax, length.out = grid_dims$ncol)
+  yy <- seq(bbox$ymin, bbox$ymax, length.out = grid_dims$nrow)
+  coords <- expand.grid(x = xx, y = yy)
+  list(
+    coords = coords,
+    zone_ids = spseg_surface_polygon_ids(coords, x),
+    cell_width = if (length(xx) > 1) diff(xx)[1] else bbox$xmax - bbox$xmin,
+    cell_height = if (length(yy) > 1) diff(yy)[1] else bbox$ymax - bbox$ymin
+  )
 }
 
 spseg_surface_grid_dims <- function(x, args) {
@@ -156,4 +200,22 @@ spseg_surface_celldim <- function(x, args) {
 
   bbox <- st_bbox(x)
   min(bbox$xmax - bbox$xmin, bbox$ymax - bbox$ymin) / 100
+}
+
+spseg_surface_cell_geometry <- function(coords, crs, width, height = width) {
+  if (nrow(coords) == 0)
+    return(st_sfc(crs = crs))
+
+  cells <- lapply(seq_len(nrow(coords)), function(i) {
+    x <- coords[i, 1]
+    y <- coords[i, 2]
+    st_polygon(list(rbind(
+      c(x - width / 2, y - height / 2),
+      c(x + width / 2, y - height / 2),
+      c(x + width / 2, y + height / 2),
+      c(x - width / 2, y + height / 2),
+      c(x - width / 2, y - height / 2)
+    )))
+  })
+  st_sfc(cells, crs = crs)
 }

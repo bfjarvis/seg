@@ -119,6 +119,125 @@ ggplot(auck_env) +
   theme_void()
 ```
 
+# Population Surfaces
+
+The default `surface="raw"` uses the area-unit data directly. For areal data, it is sometimes useful to first redistribute the counts to a grid. The `surface="grid"` option spreads the population in each polygon evenly over square-grid points before the local environments are calculated.
+
+```{r grid-surface}
+auck_grid <- spseg(
+  auck[, c("Korean", "Non_Korean")],
+  surface = "grid",
+  cellsize = 200,
+  bands = c(1000, 5000),
+  output = "full"
+)
+
+auck_grid_surface <- sf::st_sf(
+  data.frame(auck_grid@data),
+  geometry = auck_grid@geometry
+)
+auck_grid_surface$Total <- with(auck_grid_surface,Korean+Non_Korean)
+auck_grid_surface$Korean_Share <- auck_grid_surface$Korean / auck_grid_surface$Total
+
+ggplot() +
+  geom_sf(data = auck, fill = NA, color = "grey70", linewidth = 0.15) +
+  geom_sf(
+    data = auck_grid_surface,
+    aes(fill = Korean_Share,alpha=log(Total)),
+    color = NA
+  ) +
+  scale_fill_viridis_c(
+    labels = function(x) paste0(round(100 * x, 1), "%"),
+    na.value = "grey90"
+  ) +
+  coord_sf(crs = sf::st_crs(auck)) +
+  labs(fill = "Grid Korean share") +
+  theme_void()
+```
+
+The same `spseg()` call also produces segregation indices from the grid-based population surface.
+
+```{r grid-surface-indices}
+as.data.frame(auck_grid, what = "indices")
+```
+
+The stored local environments are also returned on the grid-cell support.
+
+```{r grid-surface-localenv}
+auck_grid_env <- as.data.frame(auck_grid, what = "env", shape = "long")
+auck_grid_env$Total <- rowSums(auck_grid_env[, c("Korean", "Non_Korean")])
+auck_grid_env$Korean_Share <- auck_grid_env$Korean / auck_grid_env$Total
+
+ggplot(auck_grid_env) +
+  geom_sf(aes(geometry = geometry, fill = Korean_Share), color = NA) +
+  scale_fill_viridis_c(
+    labels = function(x) paste0(round(100 * x, 1), "%"),
+    na.value = "grey90"
+  ) +
+  facet_wrap(vars(band), ncol = 2) +
+  labs(fill = "Grid local share") +
+  theme_void()
+```
+
+The `surface="pycno"` option also constructs a grid, then applies groupwise pycnophylactic interpolation. Each group is smoothed separately, then rescaled within each area unit after every iteration so the known group totals are preserved.
+
+```{r pycno-surface}
+auck_pycno <- spseg(
+  auck[, c("Korean", "Non_Korean")],
+  surface = "pycno",
+  celldim = 200,
+  converge = 2,
+  bands = c(1000, 5000),
+  output = "full"
+)
+
+auck_pycno_surface <- sf::st_sf(
+  data.frame(auck_pycno@data),
+  geometry = auck_pycno@geometry
+)
+auck_pycno_surface$Total <- with(auck_pycno_surface,Korean+Non_Korean)
+auck_pycno_surface$Korean_Share <-  with(auck_pycno_surface,Korean/Total)
+
+ggplot() +
+  geom_sf(data = auck, fill = NA, color = "grey70", linewidth = 0.15) +
+  geom_sf(
+    data = auck_pycno_surface,
+    aes(fill = Korean_Share,alpha=log(Total)),
+    color = NA
+  ) +
+  scale_fill_viridis_c(
+    labels = function(x) paste0(round(100 * x, 1), "%"),
+    na.value = "grey90"
+  ) +
+  coord_sf(crs = sf::st_crs(auck)) +
+  labs(fill = "Pycno Korean share") +
+  theme_void()
+```
+
+The segregation indices can be extracted in the same way.
+
+```{r pycno-surface-indices}
+as.data.frame(auck_pycno, what = "indices")
+```
+
+The local environments from the pycnophylactic surface use the same grid-cell geometry.
+
+```{r pycno-surface-localenv}
+auck_pycno_env <- as.data.frame(auck_pycno, what = "env", shape = "long")
+auck_pycno_env$Total <- with(auck_pycno_env, Korean + Non_Korean)
+auck_pycno_env$Korean_Share <- with(auck_pycno_env, Korean / Total)
+
+ggplot(auck_pycno_env) +
+  geom_sf(aes(geometry = geometry, fill = Korean_Share), color = NA) +
+  scale_fill_viridis_c(
+    labels = function(x) paste0(round(100 * x, 1), "%"),
+    na.value = "grey90"
+  ) +
+  facet_wrap(vars(band), ncol = 2) +
+  labs(fill = "Pycno local share") +
+  theme_void()
+```
+
 
 # Bandwidth Sensitivity
 

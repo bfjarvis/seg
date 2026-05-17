@@ -9,3 +9,7 @@ seg_indices_env_cpp <- function(data, env, measures, comparison) {
     .Call(`_seg_seg_indices_env_cpp`, data, env, measures, comparison)
 }
 
+seg_pycno_cpp <- function(zone_ids, pops, nx, ny, max_iter, converge) {
+    .Call(`_seg_seg_pycno_cpp`, zone_ids, pops, nx, ny, max_iter, converge)
+}
+

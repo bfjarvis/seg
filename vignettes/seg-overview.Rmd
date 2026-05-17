@@ -193,9 +193,9 @@ spseg(
   as.list()
 ```
 
-`surface = "pycno"` uses pycnophylactic interpolation to smooth the grid while
-preserving the original areal totals. This option requires the suggested
-`pycno` package.
+`surface = "pycno"` applies groupwise pycnophylactic interpolation over the
+grid. Each group is smoothed separately, then rescaled within each source
+polygon after every iteration so the known group totals are preserved.
 
 # Optional Spatial Adjustments
 

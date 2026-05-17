@@ -8,7 +8,7 @@ Maintainer: Seong-Yun Hong <syhong@khu.ac.kr>
 Depends: R (>= 4.2.0), methods, stats, sf, sp
 Imports: Rcpp, RcppArmadillo
 LinkingTo: Rcpp, RcppArmadillo
-Suggests: ggplot2, knitr, pycno, rmarkdown, spdep, terra, testthat (>= 3.0.0)
+Suggests: ggplot2, knitr, rmarkdown, spdep, terra, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Encoding: UTF-8

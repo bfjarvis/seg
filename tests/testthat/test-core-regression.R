@@ -392,6 +392,25 @@ test_that("spseg constructs grid population surfaces", {
 
   expect_s4_class(result, "SegSpatial")
   expect_equal(nrow(result@env), nrow(result@coords))
+
+  surface_result <- spseg(
+    grid_sf,
+    data = segdata[, 1:2],
+    surface = "grid",
+    nrow = 10,
+    ncol = 10,
+    bands = 2,
+    output = "localenv"
+  )
+  surface_df <- as.data.frame(surface_result, what = "env")
+
+  expect_s4_class(surface_result, "SegResult")
+  expect_s3_class(surface_result@geometry, "sfc")
+  expect_equal(length(surface_result@geometry), nrow(surface_result@coords))
+  expect_equal(as.character(unique(sf::st_geometry_type(surface_result@geometry))),
+               "POLYGON")
+  expect_s3_class(surface_df$geometry, "sfc")
+  expect_equal(length(surface_df$geometry), nrow(surface_result@coords))
 })
 
 test_that("spseg accommodates deprecated top-level smoothing arguments", {
@@ -414,8 +433,6 @@ test_that("spseg accommodates deprecated top-level smoothing arguments", {
 })
 
 test_that("spseg can construct pycnophylactic population surfaces", {
-  testthat::skip_if_not_installed("pycno")
-
   geom <- sf::st_make_grid(
     sf::st_as_sfc(sf::st_bbox(c(xmin = 0, ymin = 0, xmax = 2, ymax = 2))),
     n = c(2, 2)
@@ -434,6 +451,23 @@ test_that("spseg can construct pycnophylactic population surfaces", {
   expect_s4_class(result, "SegResult")
   expect_gt(nrow(result@data), nrow(x))
   expect_equal(colnames(result@data), c("a", "b"))
+  expect_s3_class(result@geometry, "sfc")
+  expect_equal(length(result@geometry), nrow(result@coords))
+  expect_equal(as.character(unique(sf::st_geometry_type(result@geometry))),
+               "POLYGON")
+  zone_ids <- seg:::spseg_surface_polygon_ids(result@coords, x)
+  surface_totals <- rowsum(result@data, zone_ids)
+  surface_totals <- surface_totals[as.character(seq_len(nrow(values))), ,
+                                   drop = FALSE]
+  expect_equal(unname(surface_totals), unname(values), tolerance = 1e-8)
+  surface_share <- result@data[, "a"] / rowSums(result@data)
+  source_share <- values[, "a"] / rowSums(values)
+  expect_lte(max(surface_share, na.rm = TRUE), max(source_share, na.rm = TRUE))
+  expect_gte(min(surface_share, na.rm = TRUE), min(source_share, na.rm = TRUE))
+
+  env_df <- as.data.frame(result, what = "env")
+  expect_s3_class(env_df$geometry, "sfc")
+  expect_equal(length(env_df$geometry), nrow(result@coords))
 })
 
 test_that("SegLocal objects support spplot examples", {
