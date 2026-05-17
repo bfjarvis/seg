@@ -2,7 +2,7 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 // Vendored nanoflann provenance, license, and checksum are recorded in
 // inst/NOTICE.md.
-#include "nanoflann.hpp"
+#include "nanoflann.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
