@@ -33,9 +33,9 @@ White, M. J. (1983). The measurement of spatial segregation. \emph{The American 
 \examples{
 # uses the idealised landscapes in 'segdata'
 data(segdata)
-geom <- st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,0)))) |> 
-  st_make_grid(cellsize = 1)
-grd_sf <- st_sf(geom)
+geom <- sf::st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,0)))) |> 
+  sf::st_make_grid(cellsize = 1)
+grd_sf <- sf::st_sf(geom)
 
 d <- rep(NA, 8) # index of dissimilarity
 p <- rep(NA, 8) # index of spatial proximity
@@ -55,11 +55,11 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
           LETTERS[i], ": D = ", round(d[i], 2), ", P = ", round(p[i], 2)
         ),
         group_share = segdata[, idx],
-        geometry = st_geometry(grd_sf)
+        geometry = sf::st_geometry(grd_sf)
       )
     })
   )
-  plot_data <- st_sf(plot_data)
+  plot_data <- sf::st_sf(plot_data)
 
   ggplot2::ggplot(plot_data) +
     ggplot2::geom_sf(ggplot2::aes(fill = group_share), color = "white") +

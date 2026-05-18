@@ -6,43 +6,6 @@ spseg_surface_method <- function(surface) {
   match.arg(surface[1], c("raw", "grid", "pycno"))
 }
 
-spseg_surface_config <- function(surface, smoothing, dots) {
-  deprecated <- character()
-
-  if (!is.null(smoothing)) {
-    deprecated <- c(deprecated, "smoothing")
-    old <- if (is.list(smoothing)) smoothing else list(smoothing = smoothing)
-    old_method <- old$smoothing %||% "none"
-    old_method <- match.arg(old_method, c("none", "raw", "equal", "grid",
-                                          "kernel", "pycno"),
-                            several.ok = FALSE)
-    surface <- switch(old_method,
-                      none = "raw",
-                      raw = "raw",
-                      equal = "grid",
-                      grid = "grid",
-                      kernel = "pycno",
-                      pycno = "pycno")
-    old$smoothing <- NULL
-    if (!is.null(old$nocol) && is.null(old$ncol))
-      old$ncol <- old$nocol
-    old$nocol <- NULL
-    dots <- c(old, dots)
-  }
-
-  if (!is.null(dots$nocol) && is.null(dots$ncol))
-    dots$ncol <- dots$nocol
-  dots$nocol <- NULL
-
-  if (length(deprecated) > 0)
-    warning("Deprecated smoothing argument(s) supplied: ",
-            paste(unique(deprecated), collapse = ", "),
-            ". Use surface = c(\"raw\", \"grid\", \"pycno\") and pass ",
-            "surface-construction options through ....", call. = FALSE)
-
-  list(surface = surface, dots = dots)
-}
-
 spseg_surface <- function(x, coords, data, surface, args, verbose) {
   surface <- spseg_surface_method(surface)
   if (surface == "raw")

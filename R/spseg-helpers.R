@@ -49,7 +49,11 @@ spseg_measure_flags <- function(measures) {
 default_bands <- function(x, data = NULL, n = 500,
                           probs = seq(0.1, 0.5, 0.1),
                           weighted = TRUE) {
-  tmp <- suppressMessages(chksegdata(x, data))
+  tmp <- if (is.null(data)) {
+    suppressMessages(chksegdata(x))
+  } else {
+    suppressMessages(chksegdata(x, data))
+  }
   coords <- tmp$coords
   data <- tmp$data
   n_points <- nrow(coords)
@@ -97,18 +101,8 @@ spseg_weighting_id <- function(weighting) {
   match(weighting, c("unweighted", "biweight", "inverse", "exponential")) - 1L
 }
 
-spseg_dots <- function(...) {
-  dots <- list(...)
-  if ("tol" %in% names(dots)) {
-    message("'tol' is ignored by spseg(); zero entropy terms are handled directly")
-    dots$tol <- NULL
-  }
-
-  dots
-}
-
 spseg_output <- function(output) {
-  match.arg(output[1], c("indices", "full", "localenv", "legacy"))
+  match.arg(output[1], c("indices", "full", "localenv"))
 }
 
 spseg_comparison <- function(comparison) {
@@ -137,17 +131,10 @@ spseg_search_id <- function(search) {
   match(spseg_search(search), c("kdtree", "brute")) - 1L
 }
 
-spseg_bands <- function(maxdist, bands, output, x, data) {
-  if (!is.null(bands) && !is.null(maxdist))
-    stop("supply only one of 'bands' or 'maxdist'", call. = FALSE)
+spseg_bands <- function(bands) {
   if (!is.null(bands))
     return(as.numeric(bands))
-  if (!is.null(maxdist))
-    return(as.numeric(maxdist))
-  if (identical(output, "legacy"))
-    return(NULL)
-
-  default_bands(x, data = data)
+  NULL
 }
 
 seg_engine_coords <- function(coords, data, bands, power, weighting, normalize,
@@ -216,24 +203,15 @@ spseg_indices_from_engine <- function(indices, bands) {
   indices
 }
 
-spseg_legacy_from_result <- function(result) {
-  indices <- result@indices$overall
-  p <- if (length(indices$p) > 0) indices$p[[1]] else
-    matrix(0, nrow = 0, ncol = 0)
-  env <- if (!is.null(result@env)) result@env[[1]] else result@data
-
-  SegSpatial(indices$d, indices$r, indices$h, p,
-             result@coords, result@data, env, result@proj4string)
-}
-
 spseg_result <- function(coords, data, env, bands, indices, measures,
-                         comparison, weighting, power, normalize, proj4string,
+                         comparison, weighting, power, normalize, crs,
                          output, call, geometry = NULL,
-                         neighbors = "radius", search = "kdtree") {
+                         neighbors = "radius", search = "kdtree",
+                         surface = "raw") {
   keep_inputs <- !identical(output, "indices")
   neighbors <- spseg_neighbors(neighbors)
   search <- spseg_search(search)
-  SegResult(
+  new_seg_result(
     coords = if (keep_inputs) coords else NULL,
     data = if (keep_inputs) data else NULL,
     env = env,
@@ -248,42 +226,11 @@ spseg_result <- function(coords, data, env, bands, indices, measures,
                      units = if (neighbors == "knn") "population" else
                        "distance",
                      engine = search, comparison = comparison),
-    proj4string = proj4string,
+    crs = crs,
+    surface = surface,
+    output = output,
     call = call
   )
-}
-
-spseg_prepare_localenv <- function(env, negative.rm) {
-  dd <- env@data
-  ee <- env@env
-
-  negIDs <- rowSums(dd < 0) > 0
-  if (sum(negIDs) > 0) {
-    if (negative.rm) {
-      warning("Rows with negative values have been removed", call. = FALSE)
-      dd <- dd[!negIDs, ]
-      ee <- ee[!negIDs, ]
-    } else {
-      warning("Negative values replaced with zero", call. = FALSE)
-      dd[dd < 0] <- 0
-      ee[ee < 0] <- 0
-    }
-  }
-
-  negIDs <- rowSums(ee < 0) > 0
-  if (sum(negIDs) > 0) {
-    if (negative.rm) {
-      warning("Rows with negative values removed", call. = FALSE)
-      dd <- dd[!negIDs, ]
-      ee <- ee[!negIDs, ]
-    } else {
-      warning("Negative values replaced with zero", call. = FALSE)
-      ee[ee < 0] <- 0
-      dd[dd < 0] <- 0
-    }
-  }
-
-  list(data = dd, env = ee)
 }
 
 spseg_restore_index_dimnames <- function(indices, data) {
@@ -311,22 +258,4 @@ spseg_indices_from_env <- function(data, env, measures, comparison) {
     comparison = as.integer(spseg_comparison_flags(comparison))
   )
   spseg_restore_index_dimnames(indices, data)
-}
-
-spseg_indices_from_localenv <- function(env, measures, useC, negative.rm,
-                                        comparison = "overall") {
-  measures <- spseg_measures(measures)
-  prepared <- spseg_prepare_localenv(env, negative.rm)
-  spseg_indices_from_env(prepared$data, prepared$env, measures, comparison)
-}
-
-spseg_from_localenv <- function(env, measures, useC, negative.rm) {
-  indices <- spseg_indices_from_localenv(env, measures, useC, negative.rm,
-                                         comparison = "overall")
-  results <- indices$overall
-  p <- if (length(results$p) > 0) results$p[[1]] else
-    matrix(0, nrow = 0, ncol = 0)
-
-  SegSpatial(results$d, results$r, results$h, p,
-             env@coords, env@data, env@env, env@proj4string)
 }

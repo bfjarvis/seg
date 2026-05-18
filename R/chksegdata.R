@@ -52,25 +52,6 @@ chksegdata <- function(x, data) {
     
   }
   # ----------------------------------------------------------------------------
-  # If 'x' is a spatial point pattern object (ppp)
-  # ----------------------------------------------------------------------------
-  else if (inherits(x, "ppp")) {
-    message(fn, ": 'x' is an object of class \"ppp\"")
-    coords <- cbind(x = x$x, y = x$y)
-    
-    if (missing(data)) {
-      if (is.null(x$marks)) {
-        stop("'data' is missing, with no default", call. = FALSE)
-      } else {
-        data <- as.matrix(x$marks)
-        message(fn, ": 'data' is missing, using marks attached to 'x'")
-      }
-    } else {
-      data <- as.matrix(data)
-    }
-  }
-  
-  # ----------------------------------------------------------------------------
   # If 'x' is a numeric matrix or data frame with coordinates
   # ----------------------------------------------------------------------------
   else if (is.matrix(x) || is.data.frame(x)) {

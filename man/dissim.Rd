@@ -8,7 +8,7 @@ Calculates the index of dissimilarity proposed by Duncan and Duncan (1955). If \
 dissim(x, data, adjust = FALSE, use_queen = FALSE, verbose = FALSE)
 }
 \arguments{
-  \item{x}{an optional object of class \code{SpatialPolygons} or \code{SpatialPolygonsDataFrame.}}
+  \item{x}{an optional \code{sf} object with polygon geometry.}
   \item{data}{a numeric matrix or data frame with two columns that represent mutually exclusive population groups (e.g., Asians and non-Asians). If more than two columns are given, only the first two will be used for computing the index.}
   \item{adjust}{logical. If TRUE, and if \sQuote{x} is given, the index of dissimilarity is adjusted according to the suggestions of Morrill (1991) and Wong (1993), depending on packages installed on the system. See \sQuote{Details} for more information. Ignore if \sQuote{x} is not given.}
   \item{use_queen}{logical. If TRUE, the queen contiguity will be used.}
@@ -16,7 +16,7 @@ dissim(x, data, adjust = FALSE, use_queen = FALSE, verbose = FALSE)
 }
 
 \details{
-\code{dissim} calculates the index of dissimilarity for \sQuote{data}. If \sQuote{data} is missing, it attempts to extract the data from \sQuote{x}. If \sQuote{x} is not given, or if it is not a valid \code{SpatialPolygonsDataFrame} object, the function stops with an error.
+\code{dissim} calculates the index of dissimilarity for \sQuote{data}. If \sQuote{data} is missing, it attempts to extract the data from \sQuote{x}. If \sQuote{x} is not given, or if it is not a valid \code{sf} object, the function stops with an error.
 
 When \sQuote{x} is given and \sQuote{adjust} is set to TRUE, the index is adjusted according to the suggestions of Morrill (1991) and Wong (1993). This automatic adjustment uses \pkg{spdep} for Morrill's D(adj) and \pkg{terra} for Wong's D(w) and D(s), when those packages are available.
 }
@@ -40,14 +40,14 @@ Wong, D. W. S. (1993). Spatial indices of segregation. \emph{Urban Studies}, \bo
 \seealso{
 \code{\link{spseg}}}
 \examples{
-if (require(spdep)) { # package 'spdep' is required
+if (requireNamespace("spdep", quietly = TRUE)) {
 
   # uses the idealised landscapes in 'segdata'
   data(segdata)
-  geom <- st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,0)))) |> 
-    st_make_grid(cellsize = 1)
-  grd_sf <- st_sf(geom)
-  grd.nb <- nb2mat(poly2nb(grd_sf, queen = FALSE), style = "B")
+  geom <- sf::st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,0)))) |> 
+    sf::st_make_grid(cellsize = 1)
+  grd_sf <- sf::st_sf(geom)
+  grd.nb <- spdep::nb2mat(spdep::poly2nb(grd_sf, queen = FALSE), style = "B")
   grd.nb <- grd.nb / sum(grd.nb)
 
   d <- list(); m <- list()

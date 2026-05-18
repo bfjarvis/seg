@@ -94,34 +94,37 @@ isp(coords, data = pattern_a, fun = function(d) 1 / (1 + d))
 # Local Environments
 
 The Reardon and O'Sullivan measures are based on local environments. Use
-`localenv()` to calculate the local population composition around each point.
-The ordinary coordinate-matrix path uses compiled C code for this calculation.
+`spseg(output = "localenv")` to calculate the local population composition
+around each point.
 
 ```{r local-environment}
-env_a <- localenv(coords, data = pattern_a, maxdist = 2)
+env_a <- spseg(coords, data = pattern_a, bands = 2, output = "localenv")
 
 env_a
-head(env_a@env)
+head(env_a$env[[1]])
 ```
 
-With `weighting = "unweighted"` and no bandwidth, all points receive equal
-weight. In that case every local environment equals the overall group means.
+With `weighting = "unweighted"` and a large enough bandwidth, all points
+receive equal weight. In that case every local environment equals the overall
+group means.
 
 ```{r local-environment-equal-weight}
-env_equal <- localenv(coords, data = pattern_a, weighting = "unweighted")
+env_equal <- spseg(coords, data = pattern_a, bands = 20,
+                   weighting = "unweighted", output = "localenv")
 
-head(env_equal@env)
+head(env_equal$env[[1]])
 colMeans(pattern_a)
 ```
 
 # Reardon and O'Sullivan Measures
 
-Use `spseg()` when you already have a `SegLocal` object.
+Use `spseg()` to calculate spatial segregation indices directly from
+coordinates and population data.
 
 ```{r spseg-localenv}
-spatial_a <- spseg(env_a)
+spatial_a <- spseg(coords, data = pattern_a, bands = 2)
 
-as.list(spatial_a)
+as.data.frame(spatial_a)
 ```
 
 Use `spseg()` as a wrapper when you want to start from coordinates and
@@ -129,9 +132,9 @@ population data. By default, the package uses the compiled C implementation for
 the index calculations.
 
 ```{r spseg}
-spatial_a_2 <- spseg(coords, data = pattern_a, maxdist = 2)
+spatial_a_2 <- spseg(coords, data = pattern_a, bands = 2)
 
-as.list(spatial_a_2)
+as.data.frame(spatial_a_2)
 ```
 
 You can request a subset of measures with `measures`.
@@ -141,10 +144,10 @@ selected <- spseg(
   coords,
   data = pattern_a,
   measures = c("information", "dissimilarity"),
-  maxdist = 2
+  bands = 2
 )
 
-as.list(selected)
+as.data.frame(selected)
 ```
 
 # Working with sf Objects
@@ -170,8 +173,8 @@ object.
 ```{r sf-input}
 isp(grid_sf[, c("A1", "A2")])
 
-env_sf <- localenv(grid_sf[, c("A1", "A2")], maxdist = 2)
-head(env_sf@env)
+env_sf <- spseg(grid_sf[, c("A1", "A2")], bands = 2, output = "localenv")
+head(env_sf$env[[1]])
 ```
 
 # Population Surfaces
@@ -188,9 +191,9 @@ spseg(
   surface = "grid",
   nrow = 10,
   ncol = 10,
-  maxdist = 2
+  bands = 2
 ) |>
-  as.list()
+  as.data.frame()
 ```
 
 `surface = "pycno"` applies groupwise pycnophylactic interpolation over the

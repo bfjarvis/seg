@@ -37,9 +37,9 @@ Wong, D. W. S. (1993). Spatial Indices of Segregation. \emph{Urban Studies}, \bo
 }
 \examples{
 data(segdata)
-geom <- st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,10), c(0,0)))) |>
-  st_make_grid(cellsize = 1)
-grd_sf <- st_sf(segdata, geometry = geom)
+geom <- sf::st_polygon(list(rbind(c(0,0), c(10,0), c(10,10), c(0,10), c(0,0)))) |>
+  sf::st_make_grid(cellsize = 1)
+grd_sf <- sf::st_sf(segdata, geometry = geom)
 
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   plot_data <- do.call(
@@ -49,11 +49,11 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
       data.frame(
         pattern = LETTERS[i],
         group_share = segdata[, idx],
-        geometry = st_geometry(grd_sf)
+        geometry = sf::st_geometry(grd_sf)
       )
     })
   )
-  plot_data <- st_sf(plot_data)
+  plot_data <- sf::st_sf(plot_data)
 
   ggplot2::ggplot(plot_data) +
     ggplot2::geom_sf(ggplot2::aes(fill = group_share), color = "white") +

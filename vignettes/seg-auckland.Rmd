@@ -23,7 +23,7 @@ are included as external package files so the examples can be run after the
 package is installed.
 
 ```{r setup}
-devtools::load_all()
+library(seg)
 library(sf)
 library(ggplot2)
 ```
@@ -140,8 +140,8 @@ auck_grid <- spseg(
 )
 
 auck_grid_surface <- sf::st_sf(
-  data.frame(auck_grid@data),
-  geometry = auck_grid@geometry
+  data.frame(auck_grid$data),
+  geometry = auck_grid$geometry
 )
 auck_grid_surface$Total <- with(auck_grid_surface,Korean+Non_Korean)
 auck_grid_surface$Korean_Share <- auck_grid_surface$Korean / auck_grid_surface$Total
@@ -214,10 +214,6 @@ ggplot(auck_env) +
 ```
 
 We can also collate the results using the original shapes, a grid, and the smoothed grid:
-
-```{r surface-localenv}
-
-```
 
 # Bandwidth Sensitivity
 

@@ -43,7 +43,7 @@ the executable chunks below are skipped. The full import code is left in place
 so the workflow can be rerun once the source files are available.
 
 ```{r setup}
-devtools::load_all()
+library(seg)
 library(sf)
 library(ggplot2)
 ```
@@ -171,8 +171,8 @@ providence_env <- spseg(
 )
 
 providence_env
-stopifnot(inherits(providence_env, "SegResult"))
-stopifnot(length(providence_env@env) == length(env_bands))
+stopifnot(inherits(providence_env, "seg_result"))
+stopifnot(length(providence_env$env) == length(env_bands))
 ```
 
 Convert local environment counts to local Hispanic shares for mapping.
@@ -219,9 +219,9 @@ providence_seg <- spseg(
 )
 
 providence_seg
-stopifnot(inherits(providence_seg, "SegResult"))
-stopifnot(identical(providence_seg@bands, bands))
-stopifnot(is.null(providence_seg@env))
+stopifnot(inherits(providence_seg, "seg_result"))
+stopifnot(identical(providence_seg$bands, bands))
+stopifnot(is.null(providence_seg$env))
 ```
 
 The overall indices summarize multi-group segregation at each bandwidth.
