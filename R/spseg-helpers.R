@@ -4,51 +4,100 @@
 # Author: Seong-Yun Hong <hong.seongyun@gmail.com>
 # ------------------------------------------------------------------------------
 spseg_measures <- function(measures) {
-  measures <- match.arg(measures, c("exposure", "information", "diversity",
-                                    "dissimilarity", "all"), several.ok = TRUE)
-  if ("all" %in% measures)
+  measures <- match.arg(
+    measures,
+    c("exposure", "information", "diversity", "dissimilarity", "all"),
+    several.ok = TRUE
+  )
+  if ("all" %in% measures) {
     measures <- c("exposure", "information", "diversity", "dissimilarity")
+  }
 
   measures
 }
 
 spseg_empty_results <- function() {
-  list(p = matrix(0, nrow = 0, ncol = 0), h = numeric(), r = numeric(),
-       d = numeric())
+  list(
+    p = matrix(0, nrow = 0, ncol = 0),
+    h = numeric(),
+    r = numeric(),
+    d = numeric()
+  )
 }
 
 spseg_measure_flags <- function(measures) {
-  c("exposure" %in% measures, "information" %in% measures,
-    "diversity" %in% measures, "dissimilarity" %in% measures)
+  c(
+    "exposure" %in% measures,
+    "information" %in% measures,
+    "diversity" %in% measures,
+    "dissimilarity" %in% measures
+  )
 }
 
 .geometric_mean_distance <- function(x, max_points = 500) {
   n <- nrow(x)
   if (n > max_points) {
     has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (has_seed)
+    if (has_seed) {
       old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    }
     set.seed(1)
-    on.exit({
-      if (has_seed)
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
-        rm(".Random.seed", envir = .GlobalEnv)
-    }, add = TRUE)
+    on.exit(
+      {
+        if (has_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (
+          exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+        ) {
+          rm(".Random.seed", envir = .GlobalEnv)
+        }
+      },
+      add = TRUE
+    )
     x <- x[sample.int(n, max_points), , drop = FALSE]
   }
 
   d <- as.numeric(dist(x))
   d <- d[d > 0]
-  if (length(d) == 0)
+  if (length(d) == 0) {
     return(0)
+  }
 
   exp(mean(log(d)))
 }
 
-default_bands <- function(x, data = NULL, n = 500,
-                          probs = seq(0.1, 0.5, 0.1),
-                          weighted = TRUE) {
+#' Default Distance Bands
+#'
+#' Calculates default distance bands from sampled pairwise distances.
+#'
+#' This helper samples up to `n` points, calculates pairwise distances among
+#' the sampled points, and returns the requested quantiles. By default,
+#' sampled points are selected with probability proportional to their total
+#' population, and only the lower half of the distance distribution is used.
+#' It is used by [spseg()] when no bandwidths are supplied.
+#'
+#' @param x A numeric coordinate matrix, data frame of coordinates, or
+#'   [sf::sf] object accepted by [spseg()].
+#' @param data Optional population data. If omitted and `x` contains attached
+#'   data, those data are used.
+#' @param n Maximum number of points to sample.
+#' @param probs Probabilities passed to [stats::quantile()]. The default
+#'   returns the first through fifth deciles.
+#' @param weighted Logical. If TRUE, sample points using row sums of `data`
+#'   as population weights.
+#'
+#' @return A numeric vector of distance bands.
+#'
+#' @seealso [spseg()]
+#'
+#' @export
+default_bands <- function(
+  x,
+  data = NULL,
+  n = 500,
+  probs = seq(0.1, 0.5, 0.1),
+  weighted = TRUE
+) {
   tmp <- if (is.null(data)) {
     suppressMessages(chksegdata(x))
   } else {
@@ -63,30 +112,44 @@ default_bands <- function(x, data = NULL, n = 500,
   if (weighted) {
     weights <- rowSums(data)
     weights[!is.finite(weights) | weights < 0] <- 0
-    if (sum(weights) <= 0)
+    if (sum(weights) <= 0) {
       weights <- NULL
+    }
   }
 
   if (n_points > sample_n) {
     has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (has_seed)
+    if (has_seed) {
       old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    }
     set.seed(1)
-    on.exit({
-      if (has_seed)
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
-        rm(".Random.seed", envir = .GlobalEnv)
-    }, add = TRUE)
-    coords <- coords[sample.int(n_points, sample_n, prob = weights), ,
-                     drop = FALSE]
+    on.exit(
+      {
+        if (has_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (
+          exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+        ) {
+          rm(".Random.seed", envir = .GlobalEnv)
+        }
+      },
+      add = TRUE
+    )
+    coords <- coords[
+      sample.int(n_points, sample_n, prob = weights),
+      ,
+      drop = FALSE
+    ]
   }
 
   d <- as.numeric(dist(coords))
   d <- d[d > 0]
-  if (length(d) == 0)
-    stop("failed to calculate default bands from the input coordinates",
-         call. = FALSE)
+  if (length(d) == 0) {
+    stop(
+      "failed to calculate default bands from the input coordinates",
+      call. = FALSE
+    )
+  }
 
   as.numeric(quantile(d, probs = probs, names = FALSE, type = 8))
 }
@@ -111,8 +174,10 @@ spseg_comparison <- function(comparison) {
 
 spseg_comparison_flags <- function(comparison) {
   comparison <- spseg_comparison(comparison)
-  c(overall = comparison %in% c("overall", "both"),
-    pairwise = comparison %in% c("pairwise", "both"))
+  c(
+    overall = comparison %in% c("overall", "both"),
+    pairwise = comparison %in% c("pairwise", "both")
+  )
 }
 
 spseg_neighbors <- function(neighbors) {
@@ -132,18 +197,29 @@ spseg_search_id <- function(search) {
 }
 
 spseg_bands <- function(bands) {
-  if (!is.null(bands))
+  if (!is.null(bands)) {
     return(as.numeric(bands))
+  }
   NULL
 }
 
-seg_engine_coords <- function(coords, data, bands, power, weighting, normalize,
-                              measures, comparison = "overall",
-                              neighbors = "radius", search = "kdtree",
-                              keep_env,
-                              keep_indices) {
-  if (nrow(coords) != nrow(data))
+seg_engine_coords <- function(
+  coords,
+  data,
+  bands,
+  power,
+  weighting,
+  normalize,
+  measures,
+  comparison = "overall",
+  neighbors = "radius",
+  search = "kdtree",
+  keep_env,
+  keep_indices
+) {
+  if (nrow(coords) != nrow(data)) {
     stop("'data' must have the same number of rows as 'coords'", call. = FALSE)
+  }
 
   xval <- coords[, 1]
   yval <- coords[, 2]
@@ -178,36 +254,58 @@ seg_engine_coords <- function(coords, data, bands, power, weighting, normalize,
     })
   }
   for (nm in intersect(c("d", "r", "h"), names(out$indices$pairwise))) {
-    out$indices$pairwise[[nm]] <- lapply(out$indices$pairwise[[nm]], function(x) {
-      rownames(x) <- colnames(x) <- colnames(data)
-      x
-    })
+    out$indices$pairwise[[nm]] <- lapply(
+      out$indices$pairwise[[nm]],
+      function(x) {
+        rownames(x) <- colnames(x) <- colnames(data)
+        x
+      }
+    )
   }
 
   out
 }
 
 spseg_indices_from_engine <- function(indices, bands) {
-  if (length(indices) == 0)
+  if (length(indices) == 0) {
     return(list())
+  }
   for (group in intersect(c("overall", "pairwise"), names(indices))) {
-    if (length(indices[[group]]$d) > 0)
+    if (length(indices[[group]]$d) > 0) {
       indices[[group]]$d <- setNames(indices[[group]]$d, bands)
-    if (length(indices[[group]]$r) > 0)
+    }
+    if (length(indices[[group]]$r) > 0) {
       indices[[group]]$r <- setNames(indices[[group]]$r, bands)
-    if (length(indices[[group]]$h) > 0)
+    }
+    if (length(indices[[group]]$h) > 0) {
       indices[[group]]$h <- setNames(indices[[group]]$h, bands)
-    if (length(indices[[group]]$p) > 0)
+    }
+    if (length(indices[[group]]$p) > 0) {
       indices[[group]]$p <- setNames(indices[[group]]$p, bands)
+    }
   }
   indices
 }
 
-spseg_result <- function(coords, data, env, bands, indices, measures,
-                         comparison, weighting, power, normalize, crs,
-                         output, call, geometry = NULL,
-                         neighbors = "radius", search = "kdtree",
-                         surface = "raw") {
+spseg_result <- function(
+  coords,
+  data,
+  env,
+  bands,
+  indices,
+  measures,
+  comparison,
+  weighting,
+  power,
+  normalize,
+  crs,
+  output,
+  call,
+  geometry = NULL,
+  neighbors = "radius",
+  search = "kdtree",
+  surface = "raw"
+) {
   keep_inputs <- !identical(output, "indices")
   neighbors <- spseg_neighbors(neighbors)
   search <- spseg_search(search)
@@ -222,10 +320,17 @@ spseg_result <- function(coords, data, env, bands, indices, measures,
     weighting = weighting,
     power = power,
     normalize = normalize,
-    neighbors = list(type = neighbors, values = bands,
-                     units = if (neighbors == "knn") "population" else
-                       "distance",
-                     engine = search, comparison = comparison),
+    neighbors = list(
+      type = neighbors,
+      values = bands,
+      units = if (neighbors == "knn") {
+        "population"
+      } else {
+        "distance"
+      },
+      engine = search,
+      comparison = comparison
+    ),
     crs = crs,
     surface = surface,
     output = output,
