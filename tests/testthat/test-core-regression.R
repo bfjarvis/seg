@@ -6,6 +6,12 @@ toy_grid <- function(cols = 1:2) {
   )
 }
 
+surface_totals_by_polygon <- function(result, source_sf) {
+  zone_ids <- seg:::spseg_surface_polygon_ids(result@coords, source_sf)
+  totals <- rowsum(result@data, zone_ids)
+  totals[as.character(seq_len(nrow(source_sf))), , drop = FALSE]
+}
+
 test_that("localenv accepts coordinate matrices and preserves dimensions", {
   toy <- toy_grid()
 
@@ -411,6 +417,10 @@ test_that("spseg constructs grid population surfaces", {
                "POLYGON")
   expect_s3_class(surface_df$geometry, "sfc")
   expect_equal(length(surface_df$geometry), nrow(surface_result@coords))
+
+  surface_totals <- surface_totals_by_polygon(surface_result, grid_sf)
+  expect_equal(unname(surface_totals), unname(as.matrix(segdata[, 1:2])),
+               tolerance = 1e-8)
 })
 
 test_that("spseg accommodates deprecated top-level smoothing arguments", {
@@ -455,10 +465,7 @@ test_that("spseg can construct pycnophylactic population surfaces", {
   expect_equal(length(result@geometry), nrow(result@coords))
   expect_equal(as.character(unique(sf::st_geometry_type(result@geometry))),
                "POLYGON")
-  zone_ids <- seg:::spseg_surface_polygon_ids(result@coords, x)
-  surface_totals <- rowsum(result@data, zone_ids)
-  surface_totals <- surface_totals[as.character(seq_len(nrow(values))), ,
-                                   drop = FALSE]
+  surface_totals <- surface_totals_by_polygon(result, x)
   expect_equal(unname(surface_totals), unname(values), tolerance = 1e-8)
   surface_share <- result@data[, "a"] / rowSums(result@data)
   source_share <- values[, "a"] / rowSums(values)
