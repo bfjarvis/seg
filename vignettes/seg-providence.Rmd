@@ -51,7 +51,7 @@ the executable chunks below are skipped. The full import code is left in place
 so the workflow can be rerun once the source files are available.
 
 ```{r setup}
-devtools::load_all()
+library(seg)
 library(sf)
 library(tidyverse)
 library(ggplot2)
@@ -105,7 +105,7 @@ str(blocks)
 ```
 
 The 2000 OMB Providence statistical area is made up of Bristol County, MA, Bristol County, RI, Kent County, RI, Newport County, RI,
-Providence County, RI, and Washington County, RI.^[https://trumpwhitehouse.archives.gov/sites/whitehouse.gov/files/omb/assets/OMB/bulletins/b03-04_attach.pdf]
+Providence County, RI, and Washington County, RI.^[https://www2.census.gov/library/publications/2004/compendia/statab/123ed/tables/app2.pdf]
 
 ```{r filter-providence}
 providence <- left_join(blocks,
