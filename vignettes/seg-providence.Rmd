@@ -8,16 +8,24 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-population_path <- "/Users/bjarvis/Dropbox/Data Sources/US Census/Decennial/2010/RI_Block_Race/nhgis0026_ds172_2010_block.csv"
-shape_path <- "/Users/bjarvis/Dropbox/Data Sources/Geography/United States/Census Shape Files/2010/tl2010_440_block_2010/RI_block_2010.shp"
-have_ri_sources <- file.exists(population_path) && file.exists(shape_path)
+population_path <- "/Users/bjarvis/Dropbox/Data Sources/US Census/Decennial/2000"
+shape_path <- "/Users/bjarvis/Dropbox/Data Sources/Geography/United States/Census Shape Files/2000"
+ri_block_path<-paste0(shape_path,"/RI_block_2000/RI_block_2000.shp")
+ma_block_path<-paste0(shape_path,"/MA_block_2000/MA_block_2000.shp")
+ri_count_path<-paste0(population_path,"/RI/nhgis0030_ds147_2000_block.csv")
+ma_count_path<-paste0(population_path,"/MA/nhgis0031_ds147_2000_block.csv")
+
+have_resources <- file.exists(ri_block_path) &&
+  file.exists(ma_block_path) &&
+  file.exists(ri_count_path) &&
+  file.exists(ma_count_path)
 
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 7,
   fig.height = 5,
-  eval = have_ri_sources
+  eval = have_resources
 )
 ```
 
@@ -35,7 +43,7 @@ by Race, for 2010 Census blocks in Rhode Island. The block geometries are 2010
 Census TIGER/Line block shapes for Rhode Island.
 
 ```{r source-check, eval = TRUE}
-have_ri_sources
+have_resources
 ```
 
 If the result above is `FALSE`, the local source files are not available and
@@ -43,114 +51,92 @@ the executable chunks below are skipped. The full import code is left in place
 so the workflow can be rerun once the source files are available.
 
 ```{r setup}
-library(seg)
+devtools::load_all()
 library(sf)
+library(tidyverse)
 library(ggplot2)
 ```
 
 # Import Source Data
 
-Read the NHGIS population extract and Rhode Island block geometries.
+Read the block-level count data, which have the following race and Hispanic origin variables:
 
-```{r read-source-data}
-
-race <- read.csv(population_path, check.names = FALSE,
-                 stringsAsFactors = FALSE)
-race$Total <- race$H7Z001
-race$White <- race$H7Z003
-race$Black <- race$H7Z004
-race$Asian <- race$H7Z006
-race$Hispanic <- race$H7Z010
-race$Other <- race$H7Z005 + race$H7Z007 + race$H7Z008 + race$H7Z009
-race<-race[,c("GISJOIN","PLACEA","Total",'White','Black','Asian','Hispanic','Other')]
-
-ri_blocks <- sf::st_read(shape_path, quiet = TRUE)
-
-dim(race)
-dim(ri_blocks)
-names(race)
-names(ri_blocks)
+```
+    FYF001:      Not Hispanic or Latino >> White alone
+    FYF002:      Not Hispanic or Latino >> Black or African American alone
+    FYF003:      Not Hispanic or Latino >> American Indian and Alaska Native alone
+    FYF004:      Not Hispanic or Latino >> Asian alone
+    FYF005:      Not Hispanic or Latino >> Native Hawaiian and Other Pacific Islander alone
+    FYF006:      Not Hispanic or Latino >> Some other race alone
+    FYF007:      Not Hispanic or Latino >> Two or more races
+    FYF008:      Hispanic or Latino >> White alone
+    FYF009:      Hispanic or Latino >> Black or African American alone
+    FYF010:      Hispanic or Latino >> American Indian and Alaska Native alone
+    FYF011:      Hispanic or Latino >> Asian alone
+    FYF012:      Hispanic or Latino >> Native Hawaiian and Other Pacific Islander alone
+    FYF013:      Hispanic or Latino >> Some other race alone
+    FYF014:      Hispanic or Latino >> Two or more races
 ```
 
-The NHGIS file includes a `PLACEA` code. Providence city is `59000`. The
-shapefile and the NHGIS extract both include `GISJOIN`, which provides the
-join key.
+```{r read-count-data}
+race <- bind_rows(
+  read.csv(
+    ma_count_path,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  ) ,
+  read.csv(
+    ri_count_path,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+) |> select(GISJOIN, YEAR, COUNTY, STATE, PLACEA, starts_with("FYF")) |> 
+  mutate(White=FYF001, 
+         Black=FYF002,
+         Asian=FYF004,
+         Hispanic=FYF008+FYF009+FYF010+FYF011+FYF012+FYF013+FYF014)
+str(race)
+```
+```{r read-block-shapes}
+blocks <- bind_rows(
+  sf::st_read(ma_block_path, quiet = TRUE),
+  sf::st_read(ri_block_path, quiet = TRUE))
+str(blocks)
+```
+
+The 2000 OMB Providence statistical area is made up of Bristol County, MA, Bristol County, RI, Kent County, RI, Newport County, RI,
+Providence County, RI, and Washington County, RI.^[https://trumpwhitehouse.archives.gov/sites/whitehouse.gov/files/omb/assets/OMB/bulletins/b03-04_attach.pdf]
 
 ```{r filter-providence}
-providence <- merge(ri_blocks, race[race$PLACEA==59000,], by = "GISJOIN")
-providence <- providence[order(providence$GISJOIN), ]
-
-nrow(providence)
-sum(providence$Total)
-unique(providence$COUNTY)
+providence <- left_join(blocks,
+                race |> select(-starts_with("FYF"))) |> 
+  filter(COUNTY %in% c('Providence','Bristol','Kent','Washington','Newport'))
 ```
 
-# Prepare Population Groups
+# Prepare and Plot the Population Composition Data
 
-The NHGIS P5 table separates Hispanic origin from race. For these examples,
-construct mutually exclusive categories:
-
-* `White`: not Hispanic or Latino, White alone
-* `Black`: not Hispanic or Latino, Black or African American alone
-* `Asian`: not Hispanic or Latino, Asian alone
-* `Hispanic`: Hispanic or Latino, any race
-* `Other`: remaining non-Hispanic categories
-
-```{r prepare-groups}
-group_cols <- c("White", "Black", "Asian", "Hispanic", "Other")
-group_counts <- sf::st_drop_geometry(providence[, group_cols])
-
-stopifnot(all(rowSums(group_counts) == providence$Total))
-stopifnot(sum(providence$Total) == 178042)
-
-colSums(group_counts)
-```
-
-Add a few shares for plotting and checking.
+We can calculate the total (conditional on omitting non-Hispanic, two or more race groups and American Indian and Alaska natives and Pacific Islanders), and then the population shares conditional on that total. Then we can plot, in this case just for the city of Providence, rather than the whole metro.
 
 ```{r group-shares}
-providence$white_share <- ifelse(providence$Total > 0,
-                                 providence$White / providence$Total, NA)
-providence$black_share <- ifelse(providence$Total > 0,
-                                 providence$Black / providence$Total, NA)
-providence$asian_share <- ifelse(providence$Total > 0,
-                                 providence$Asian / providence$Total, NA)
-providence$hispanic_share <- ifelse(providence$Total > 0,
-                                    providence$Hispanic / providence$Total, NA)
+providence<-providence |> 
+  mutate(Total=White+Black+Asian+Hispanic,
+         across(c(White,Black,Asian,Hispanic),
+                ~.x/Total,
+                .names="{.col}_Share")) 
 
-dominant_id <- max.col(group_counts, ties.method = "first")
-providence$largest_group <- group_cols[dominant_id]
-providence$largest_group <- ifelse(providence$Total<=0,NA,providence$largest_group)
-providence$largest_group <- factor(providence$largest_group, levels = group_cols)
-
-
-summary(providence[, c("Total", "white_share", "black_share",
-                       "asian_share", "hispanic_share")])
-```
-
-# Plot Raw Data
-
-The first map shows the largest group in each populated block.
-
-```{r dominant-group-map}
-ggplot(providence) +
-  geom_sf(aes(fill = factor(largest_group)), color = NA) +
-  scale_fill_discrete(na.value='gray70') +
+providence |> 
+  filter(PLACEA==59000) |> 
+  pivot_longer(cols=ends_with("Share"),names_to="group",values_to="share") |> 
+ggplot() +
+  geom_sf(aes(fill = share), color = NA) +
+  scale_fill_continuous(na.value='gray70') +
   labs(fill = "Largest group") +
+  facet_wrap(~group) +
   theme_minimal()
+
 ```
 
-The next map focuses on the Hispanic share of each block's population.
-
-```{r hispanic-share-map}
-ggplot(providence) +
-  geom_sf(aes(fill = hispanic_share), color = NA) +
-  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x), "%"),na.value='gray70') +
-  labs(fill = "Hispanic share") +
-  theme_minimal()
-```
-
-# Local Environments
+# Indices and local environments
 
 Providence block geometries are projected in meters, so bandwidths below are
 interpreted as meters. A bandwidth of 1 meter is included as a reference case:
@@ -158,14 +144,16 @@ because block centroids are farther apart than this, it reproduces the original
 block composition.
 
 ```{r local-environments}
-env_bands <- c(1, 250, 500, 1000)
-providence_env <- spseg(
-  providence[, group_cols],
-  bands = env_bands,
+providence |>
+  filter(PLACEA==59000 & Total>0) |> 
+  select(White, Black, Asian, Hispanic) |> 
+spseg(
+  bands = c(1, 500, 1000, 2000, 4000),
   weighting = "biweight",
   power = 3,
+  neighbors = "radius",
+  search="kdtree",
   normalize = TRUE,
-  measures = "dissimilarity",
   comparison = "overall",
   output = "full"
 )
