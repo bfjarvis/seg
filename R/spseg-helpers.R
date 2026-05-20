@@ -16,15 +16,6 @@ spseg_measures <- function(measures) {
   measures
 }
 
-spseg_empty_results <- function() {
-  list(
-    p = matrix(0, nrow = 0, ncol = 0),
-    h = numeric(),
-    r = numeric(),
-    d = numeric()
-  )
-}
-
 spseg_measure_flags <- function(measures) {
   c(
     "exposure" %in% measures,
@@ -32,38 +23,6 @@ spseg_measure_flags <- function(measures) {
     "diversity" %in% measures,
     "dissimilarity" %in% measures
   )
-}
-
-.geometric_mean_distance <- function(x, max_points = 500) {
-  n <- nrow(x)
-  if (n > max_points) {
-    has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (has_seed) {
-      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    }
-    set.seed(1)
-    on.exit(
-      {
-        if (has_seed) {
-          assign(".Random.seed", old_seed, envir = .GlobalEnv)
-        } else if (
-          exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-        ) {
-          rm(".Random.seed", envir = .GlobalEnv)
-        }
-      },
-      add = TRUE
-    )
-    x <- x[sample.int(n, max_points), , drop = FALSE]
-  }
-
-  d <- as.numeric(dist(x))
-  d <- d[d > 0]
-  if (length(d) == 0) {
-    return(0)
-  }
-
-  exp(mean(log(d)))
 }
 
 #' Default Distance Bands
@@ -164,43 +123,11 @@ spseg_weighting_id <- function(weighting) {
   match(weighting, c("unweighted", "biweight", "inverse", "exponential")) - 1L
 }
 
-spseg_output <- function(output) {
-  match.arg(output[1], c("indices", "full", "localenv"))
-}
-
-spseg_comparison <- function(comparison) {
-  match.arg(comparison, c("overall", "pairwise", "both"))
-}
-
 spseg_comparison_flags <- function(comparison) {
-  comparison <- spseg_comparison(comparison)
   c(
     overall = comparison %in% c("overall", "both"),
     pairwise = comparison %in% c("pairwise", "both")
   )
-}
-
-spseg_neighbors <- function(neighbors) {
-  match.arg(neighbors, c("radius", "knn"))
-}
-
-spseg_neighbor_id <- function(neighbors) {
-  match(spseg_neighbors(neighbors), c("radius", "knn")) - 1L
-}
-
-spseg_search <- function(search) {
-  match.arg(search, c("kdtree", "brute"))
-}
-
-spseg_search_id <- function(search) {
-  match(spseg_search(search), c("kdtree", "brute")) - 1L
-}
-
-spseg_bands <- function(bands) {
-  if (!is.null(bands)) {
-    return(as.numeric(bands))
-  }
-  NULL
 }
 
 seg_engine_coords <- function(
@@ -226,8 +153,8 @@ seg_engine_coords <- function(
   measures <- if (keep_indices) spseg_measures(measures) else character()
   measure_flags <- spseg_measure_flags(measures)
   comparison_flags <- spseg_comparison_flags(comparison)
-  neighbors_id <- spseg_neighbor_id(neighbors)
-  search_id <- spseg_search_id(search)
+  neighbors_id <- match(neighbors, c("radius", "knn")) - 1L
+  search_id <- match(search, c("kdtree", "brute")) - 1L
   out <- seg_engine_cpp(
     x = xval,
     y = yval,
@@ -287,58 +214,14 @@ spseg_indices_from_engine <- function(indices, bands) {
   indices
 }
 
-spseg_result <- function(
-  coords,
-  data,
-  env,
-  bands,
-  indices,
-  measures,
-  comparison,
-  weighting,
-  power,
-  normalize,
-  crs,
-  output,
-  call,
-  geometry = NULL,
-  neighbors = "radius",
-  search = "kdtree",
-  surface = "raw"
-) {
-  keep_inputs <- !identical(output, "indices")
-  neighbors <- spseg_neighbors(neighbors)
-  search <- spseg_search(search)
-  new_seg_result(
-    coords = if (keep_inputs) coords else NULL,
-    data = if (keep_inputs) data else NULL,
+spseg_indices_from_env <- function(data, env, measures, comparison) {
+  measures <- spseg_measures(measures)
+  indices <- seg_indices_env_cpp(
+    data = data,
     env = env,
-    geometry = if (keep_inputs) geometry else NULL,
-    bands = bands,
-    indices = indices,
-    measures = measures,
-    weighting = weighting,
-    power = power,
-    normalize = normalize,
-    neighbors = list(
-      type = neighbors,
-      values = bands,
-      units = if (neighbors == "knn") {
-        "population"
-      } else {
-        "distance"
-      },
-      engine = search,
-      comparison = comparison
-    ),
-    crs = crs,
-    surface = surface,
-    output = output,
-    call = call
+    measures = as.integer(spseg_measure_flags(measures)),
+    comparison = as.integer(spseg_comparison_flags(comparison))
   )
-}
-
-spseg_restore_index_dimnames <- function(indices, data) {
   if (length(indices$overall$p) > 0) {
     indices$overall$p <- lapply(indices$overall$p, function(p) {
       rownames(p) <- colnames(p) <- colnames(data)
@@ -352,15 +235,4 @@ spseg_restore_index_dimnames <- function(indices, data) {
     })
   }
   indices
-}
-
-spseg_indices_from_env <- function(data, env, measures, comparison) {
-  measures <- spseg_measures(measures)
-  indices <- seg_indices_env_cpp(
-    data = data,
-    env = env,
-    measures = as.integer(spseg_measure_flags(measures)),
-    comparison = as.integer(spseg_comparison_flags(comparison))
-  )
-  spseg_restore_index_dimnames(indices, data)
 }

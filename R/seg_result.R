@@ -6,46 +6,51 @@
   if (is.null(x)) y else x
 }
 
-new_seg_result <- function(
+spseg_result <- function(
   coords = NULL,
   data = NULL,
   env = NULL,
   bands,
   indices = list(),
   measures = character(),
+  comparison = "overall",
   weighting = character(),
   power = numeric(),
   normalize = logical(),
-  neighbors = list(type = "radius"),
+  neighbors = "radius",
+  search = "kdtree",
   geometry = NULL,
   crs = st_crs(as.character(NA)),
   surface = "raw",
   output = "indices",
   call = NULL
 ) {
+  keep_inputs <- !identical(output, "indices")
+  units <- if (identical(neighbors, "knn")) "population" else "distance"
   x <- list(
-    coords = coords,
-    data = data,
+    coords = if (keep_inputs) coords else NULL,
+    data = if (keep_inputs) data else NULL,
     env = env,
-    geometry = geometry,
+    geometry = if (keep_inputs) geometry else NULL,
     bands = bands,
     indices = indices,
     measures = measures,
     weighting = weighting,
     power = power,
     normalize = normalize,
-    neighbors = neighbors,
+    neighbors = list(
+      type = neighbors,
+      values = bands,
+      units = units,
+      engine = search,
+      comparison = comparison
+    ),
     crs = st_crs(crs),
     surface = surface,
     output = output,
     call = call
   )
-  validate_seg_result(x)
-  class(x) <- "seg_result"
-  x
-}
 
-validate_seg_result <- function(x) {
   if (
     !is.null(x$coords) &&
       (!is.matrix(x$coords) || ncol(x$coords) != 2 || !is.numeric(x$coords))
@@ -90,7 +95,9 @@ validate_seg_result <- function(x) {
   if (length(x$bands) == 0 || any(!is.finite(x$bands))) {
     stop("'bands' must contain finite numeric values", call. = FALSE)
   }
-  invisible(x)
+
+  class(x) <- "seg_result"
+  x
 }
 
 #' Spatial Segregation Result Objects

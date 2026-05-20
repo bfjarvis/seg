@@ -2,12 +2,7 @@
 # Population surface construction for spseg
 # ------------------------------------------------------------------------------
 
-spseg_surface_method <- function(surface) {
-  match.arg(surface[1], c("raw", "grid", "pycno"))
-}
-
 spseg_surface <- function(x, coords, data, surface, args, verbose) {
-  surface <- spseg_surface_method(surface)
   if (surface == "raw")
     return(list(coords = coords, data = data, geometry = NULL))
   if (!inherits(x, "sf"))

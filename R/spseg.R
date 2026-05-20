@@ -151,11 +151,11 @@ spseg <- function(
   ...
 ) {
   call <- match.call()
-  output <- spseg_output(output)
-  comparison <- spseg_comparison(comparison)
-  neighbors <- spseg_neighbors(neighbors)
-  search <- spseg_search(search)
-  surface <- spseg_surface_method(surface)
+  output <- match.arg(output)
+  comparison <- match.arg(comparison)
+  neighbors <- match.arg(neighbors)
+  search <- match.arg(search)
+  surface <- match.arg(surface)
   dots <- list(...)
   weighting <- if (missing(weighting)) "biweight" else match.arg(weighting)
   normalize <- isTRUE(normalize)
@@ -167,7 +167,9 @@ spseg <- function(
     )
   }
 
-  bands <- spseg_bands(bands)
+  if (!is.null(bands)) {
+    bands <- as.numeric(bands)
+  }
   if (!is.null(bands) && any(!is.finite(bands))) {
     stop("'bands' must contain finite numeric values", call. = FALSE)
   }

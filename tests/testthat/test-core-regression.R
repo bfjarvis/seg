@@ -58,6 +58,33 @@ test_that("spseg full output stores local environments and indices", {
                indices_only$indices$overall$p[["2"]], tolerance = 1e-12)
 })
 
+test_that("indices from stored local environments match full spseg output", {
+  toy <- toy_grid(cols = 1:3)
+  result <- spseg(toy$coords, toy$values, bands = 2,
+                  comparison = "both", output = "full")
+  indices <- seg:::spseg_indices_from_env(
+    data = result$data,
+    env = result$env[[1]],
+    measures = "all",
+    comparison = "both"
+  )
+
+  expect_equal(indices$overall$d[[1]],
+               result$indices$overall$d[["2"]], tolerance = 1e-12)
+  expect_equal(indices$overall$r[[1]],
+               result$indices$overall$r[["2"]], tolerance = 1e-12)
+  expect_equal(indices$overall$h[[1]],
+               result$indices$overall$h[["2"]], tolerance = 1e-12)
+  expect_equal(indices$overall$p[[1]],
+               result$indices$overall$p[["2"]], tolerance = 1e-12)
+  expect_equal(indices$pairwise$d[[1]],
+               result$indices$pairwise$d[["2"]], tolerance = 1e-12)
+  expect_equal(indices$pairwise$r[[1]],
+               result$indices$pairwise$r[["2"]], tolerance = 1e-12)
+  expect_equal(indices$pairwise$h[[1]],
+               result$indices$pairwise$h[["2"]], tolerance = 1e-12)
+})
+
 test_that("weighting schemes behave as expected for coordinates", {
   coords <- cbind(x = c(0, 1, 3), y = 0)
   values <- matrix(c(10, 0,
