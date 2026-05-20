@@ -13,7 +13,7 @@ spseg_result <- function(
   bands,
   indices = list(),
   measures = character(),
-  comparison = "overall",
+  scope = "both",
   weighting = character(),
   power = numeric(),
   normalize = logical(),
@@ -43,7 +43,7 @@ spseg_result <- function(
       values = bands,
       units = units,
       engine = search,
-      comparison = comparison
+      scope = scope
     ),
     crs = st_crs(crs),
     surface = surface,
@@ -350,16 +350,16 @@ as.data.frame.seg_result <- function(
   }
 
   if (what == "indices") {
-    overall <- x$indices$overall
+    multigroup <- x$indices$multigroup
     out <- data.frame()
-    scalar_names <- intersect(c("d", "r", "h"), names(overall))
+    scalar_names <- intersect(c("d", "r", "h"), names(multigroup))
     for (nm in scalar_names) {
-      values <- overall[[nm]]
+      values <- multigroup[[nm]]
       if (length(values) > 0) {
         out <- rbind(
           out,
           data.frame(
-            comparison = "overall",
+            scope = "multigroup",
             band = x$bands,
             measure = nm,
             value = values
@@ -388,7 +388,7 @@ as.data.frame.seg_result <- function(
             mat <- mats[[i]]
             idx <- which(upper.tri(mat), arr.ind = TRUE)
             data.frame(
-              comparison = "pairwise",
+              scope = "pairwise",
               band = x$bands[i],
               measure = nm,
               group_a = rownames(mat)[idx[, 1]],
@@ -404,7 +404,7 @@ as.data.frame.seg_result <- function(
     return(out)
   }
 
-  p <- x$indices$overall$p
+  p <- x$indices$multigroup$p
   if (is.null(p) || length(p) == 0) {
     return(data.frame())
   }

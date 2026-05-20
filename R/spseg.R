@@ -25,7 +25,7 @@
 #' distance until the threshold is reached, with the final boundary unit
 #' included fractionally when needed.
 #'
-#' Overall measures are stored in `result$indices$overall`. Pairwise
+#' Multigroup measures are stored in `result$indices$multigroup`. Pairwise
 #' measures, when requested, are stored in `result$indices$pairwise`.
 #' Pairwise scalar measures are returned as one symmetric matrix per
 #' bandwidth with one row and column for each population group. Units with
@@ -75,8 +75,8 @@
 #'   redistributes areal counts over a square grid. "pycno" applies
 #'   groupwise pycnophylactic smoothing on that grid while preserving source
 #'   polygon group totals.
-#' @param comparison Whether to calculate "overall" multi-group measures,
-#'   "pairwise" two-group measures, or "both".
+#' @param scope Whether to calculate "multigroup" measures, "pairwise"
+#'   two-group measures, or "both".
 #' @param output Return mode. "indices" stores only segregation indices.
 #'   "full" stores both indices and local environments. "localenv"
 #'   stores local environments without calculating indices.
@@ -145,14 +145,14 @@ spseg <- function(
   neighbors = c("radius", "knn"),
   search = c("kdtree", "brute"),
   surface = c("raw", "grid", "pycno"),
-  comparison = c("overall", "pairwise", "both"),
+  scope = c("both", "multigroup", "pairwise"),
   output = c("indices", "full", "localenv"),
   verbose = FALSE,
   ...
 ) {
   call <- match.call()
   output <- match.arg(output)
-  comparison <- match.arg(comparison)
+  scope <- match.arg(scope)
   neighbors <- match.arg(neighbors)
   search <- match.arg(search)
   surface <- match.arg(surface)
@@ -217,7 +217,7 @@ spseg <- function(
     weighting = weighting,
     normalize = normalize,
     measures = measures_to_compute,
-    comparison = comparison,
+    scope = scope,
     neighbors = neighbors,
     search = search,
     keep_env = !identical(output, "indices"),
@@ -239,7 +239,7 @@ spseg <- function(
     } else {
       character()
     },
-    comparison = comparison,
+    scope = scope,
     weighting = weighting,
     power = power,
     normalize = normalize,

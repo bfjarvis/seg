@@ -54,7 +54,7 @@ default_bands <- function(
   x,
   data = NULL,
   n = 500,
-  probs = seq(0.1, 0.5, 0.1),
+  probs = c(0.01,0.05,seq(0.1,0.7,0.1)),
   weighted = TRUE
 ) {
   tmp <- if (is.null(data)) {
@@ -123,10 +123,10 @@ spseg_weighting_id <- function(weighting) {
   match(weighting, c("unweighted", "biweight", "inverse", "exponential")) - 1L
 }
 
-spseg_comparison_flags <- function(comparison) {
+spseg_scope_flags <- function(scope) {
   c(
-    overall = comparison %in% c("overall", "both"),
-    pairwise = comparison %in% c("pairwise", "both")
+    multigroup = scope %in% c("multigroup", "both"),
+    pairwise = scope %in% c("pairwise", "both")
   )
 }
 
@@ -138,7 +138,7 @@ seg_engine_coords <- function(
   weighting,
   normalize,
   measures,
-  comparison = "overall",
+  scope = "both",
   neighbors = "radius",
   search = "kdtree",
   keep_env,
@@ -152,7 +152,7 @@ seg_engine_coords <- function(
   yval <- coords[, 2]
   measures <- if (keep_indices) spseg_measures(measures) else character()
   measure_flags <- spseg_measure_flags(measures)
-  comparison_flags <- spseg_comparison_flags(comparison)
+  scope_flags <- spseg_scope_flags(scope)
   neighbors_id <- match(neighbors, c("radius", "knn")) - 1L
   search_id <- match(search, c("kdtree", "brute")) - 1L
   out <- seg_engine_cpp(
@@ -164,7 +164,7 @@ seg_engine_coords <- function(
     weighting = as.integer(spseg_weighting_id(weighting)),
     normalize = as.integer(normalize),
     measures = as.integer(measure_flags),
-    comparison = as.integer(comparison_flags),
+    scope = as.integer(scope_flags),
     keep_env = as.integer(keep_env),
     keep_indices = as.integer(keep_indices),
     neighbors = as.integer(neighbors_id),
@@ -174,8 +174,8 @@ seg_engine_coords <- function(
   if (!is.null(out$env)) {
     out$env <- lapply(out$env, .restore_env_dimnames, data = data)
   }
-  if (!is.null(out$indices$overall$p)) {
-    out$indices$overall$p <- lapply(out$indices$overall$p, function(p) {
+  if (!is.null(out$indices$multigroup$p)) {
+    out$indices$multigroup$p <- lapply(out$indices$multigroup$p, function(p) {
       rownames(p) <- colnames(p) <- colnames(data)
       p
     })
@@ -197,7 +197,7 @@ spseg_indices_from_engine <- function(indices, bands) {
   if (length(indices) == 0) {
     return(list())
   }
-  for (group in intersect(c("overall", "pairwise"), names(indices))) {
+  for (group in intersect(c("multigroup", "pairwise"), names(indices))) {
     if (length(indices[[group]]$d) > 0) {
       indices[[group]]$d <- setNames(indices[[group]]$d, bands)
     }
@@ -214,16 +214,16 @@ spseg_indices_from_engine <- function(indices, bands) {
   indices
 }
 
-spseg_indices_from_env <- function(data, env, measures, comparison) {
+spseg_indices_from_env <- function(data, env, measures, scope = "both") {
   measures <- spseg_measures(measures)
   indices <- seg_indices_env_cpp(
     data = data,
     env = env,
     measures = as.integer(spseg_measure_flags(measures)),
-    comparison = as.integer(spseg_comparison_flags(comparison))
+    scope = as.integer(spseg_scope_flags(scope))
   )
-  if (length(indices$overall$p) > 0) {
-    indices$overall$p <- lapply(indices$overall$p, function(p) {
+  if (length(indices$multigroup$p) > 0) {
+    indices$multigroup$p <- lapply(indices$multigroup$p, function(p) {
       rownames(p) <- colnames(p) <- colnames(data)
       p
     })

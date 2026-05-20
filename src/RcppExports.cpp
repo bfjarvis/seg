@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // seg_engine_cpp
-List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data, NumericVector bands, double power, int weighting, int normalize, IntegerVector measures, IntegerVector comparison, int keep_env, int keep_indices, int neighbors, int search);
-RcppExport SEXP _seg_seg_engine_cpp(SEXP xSEXP, SEXP ySEXP, SEXP dataSEXP, SEXP bandsSEXP, SEXP powerSEXP, SEXP weightingSEXP, SEXP normalizeSEXP, SEXP measuresSEXP, SEXP comparisonSEXP, SEXP keep_envSEXP, SEXP keep_indicesSEXP, SEXP neighborsSEXP, SEXP searchSEXP) {
+List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data, NumericVector bands, double power, int weighting, int normalize, IntegerVector measures, IntegerVector scope, int keep_env, int keep_indices, int neighbors, int search);
+RcppExport SEXP _seg_seg_engine_cpp(SEXP xSEXP, SEXP ySEXP, SEXP dataSEXP, SEXP bandsSEXP, SEXP powerSEXP, SEXP weightingSEXP, SEXP normalizeSEXP, SEXP measuresSEXP, SEXP scopeSEXP, SEXP keep_envSEXP, SEXP keep_indicesSEXP, SEXP neighborsSEXP, SEXP searchSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -25,26 +25,26 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type weighting(weightingSEXP);
     Rcpp::traits::input_parameter< int >::type normalize(normalizeSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type measures(measuresSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type comparison(comparisonSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type scope(scopeSEXP);
     Rcpp::traits::input_parameter< int >::type keep_env(keep_envSEXP);
     Rcpp::traits::input_parameter< int >::type keep_indices(keep_indicesSEXP);
     Rcpp::traits::input_parameter< int >::type neighbors(neighborsSEXP);
     Rcpp::traits::input_parameter< int >::type search(searchSEXP);
-    rcpp_result_gen = Rcpp::wrap(seg_engine_cpp(x, y, data, bands, power, weighting, normalize, measures, comparison, keep_env, keep_indices, neighbors, search));
+    rcpp_result_gen = Rcpp::wrap(seg_engine_cpp(x, y, data, bands, power, weighting, normalize, measures, scope, keep_env, keep_indices, neighbors, search));
     return rcpp_result_gen;
 END_RCPP
 }
 // seg_indices_env_cpp
-List seg_indices_env_cpp(NumericMatrix data, NumericMatrix env, IntegerVector measures, IntegerVector comparison);
-RcppExport SEXP _seg_seg_indices_env_cpp(SEXP dataSEXP, SEXP envSEXP, SEXP measuresSEXP, SEXP comparisonSEXP) {
+List seg_indices_env_cpp(NumericMatrix data, NumericMatrix env, IntegerVector measures, IntegerVector scope);
+RcppExport SEXP _seg_seg_indices_env_cpp(SEXP dataSEXP, SEXP envSEXP, SEXP measuresSEXP, SEXP scopeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericMatrix >::type data(dataSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type env(envSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type measures(measuresSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type comparison(comparisonSEXP);
-    rcpp_result_gen = Rcpp::wrap(seg_indices_env_cpp(data, env, measures, comparison));
+    Rcpp::traits::input_parameter< IntegerVector >::type scope(scopeSEXP);
+    rcpp_result_gen = Rcpp::wrap(seg_indices_env_cpp(data, env, measures, scope));
     return rcpp_result_gen;
 END_RCPP
 }

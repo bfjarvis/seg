@@ -15,7 +15,7 @@ spseg(
   neighbors = c("radius", "knn"),
   search = c("kdtree", "brute"),
   surface = c("raw", "grid", "pycno"),
-  comparison = c("overall", "pairwise", "both"),
+  scope = c("both", "multigroup", "pairwise"),
   output = c("indices", "full", "localenv"),
   verbose = FALSE,
   ...
@@ -62,8 +62,8 @@ redistributes areal counts over a square grid. "pycno" applies
 groupwise pycnophylactic smoothing on that grid while preserving source
 polygon group totals.}
 
-\item{comparison}{Whether to calculate "overall" multi-group measures,
-"pairwise" two-group measures, or "both".}
+\item{scope}{Whether to calculate "multigroup" measures, "pairwise"
+two-group measures, or "both".}
 
 \item{output}{Return mode. "indices" stores only segregation indices.
 "full" stores both indices and local environments. "localenv"
@@ -107,7 +107,7 @@ threshold. Otherwise, neighboring units are added in order of centroid
 distance until the threshold is reached, with the final boundary unit
 included fractionally when needed.
 
-Overall measures are stored in `result$indices$overall`. Pairwise
+Multigroup measures are stored in `result$indices$multigroup`. Pairwise
 measures, when requested, are stored in `result$indices$pairwise`.
 Pairwise scalar measures are returned as one symmetric matrix per
 bandwidth with one row and column for each population group. Units with

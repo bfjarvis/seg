@@ -8,7 +8,7 @@ default_bands(
   x,
   data = NULL,
   n = 500,
-  probs = seq(0.1, 0.5, 0.1),
+  probs = c(0.01, 0.05, seq(0.1, 0.7, 0.1)),
   weighted = TRUE
 )
 }

@@ -220,7 +220,7 @@ std::vector<GroupPair> make_pairs(const arma::vec& T_m)
 
 // Nomenclature follows Reardon and O'Sullivan (2004)
 // P: exposure/isolation
-void accumulate_P_overall(arma::cube& P_acc, int b, int i,
+void accumulate_P_multigroup(arma::cube& P_acc, int b, int i,
                           const arma::mat& N,
                           const arma::vec& T_m,
                           const arma::vec& p_m)
@@ -229,21 +229,21 @@ void accumulate_P_overall(arma::cube& P_acc, int b, int i,
 }
 
 // H: information theory
-void accumulate_H_overall(arma::vec& H_acc, int b, double T_i,
+void accumulate_H_multigroup(arma::vec& H_acc, int b, double T_i,
                           const arma::vec& p_m, double logM)
 {
   H_acc[b] += T_i * entropy(p_m, logM);
 }
 
 // R: relative diversity
-void accumulate_R_overall(arma::vec& R_acc, int b, double T_i,
+void accumulate_R_multigroup(arma::vec& R_acc, int b, double T_i,
                           const arma::vec& p_m)
 {
   R_acc[b] += T_i * interaction(p_m);
 }
 
 // D: dissimilarity
-void accumulate_D_overall(arma::vec& D_acc, int b, double T_i,
+void accumulate_D_multigroup(arma::vec& D_acc, int b, double T_i,
                           const arma::vec& p_m,
                           const arma::vec& P_m,
                           double denominator)
@@ -394,7 +394,7 @@ NumericVector finalize_scalar_index(const arma::vec& acc,
   return out;
 }
 
-List finalize_P_overall(const arma::cube& P_acc, int B)
+List finalize_P_multigroup(const arma::cube& P_acc, int B)
 {
   List out(B);
   for (int b = 0; b < B; ++b)
@@ -433,13 +433,13 @@ List finalize_pairwise_matrix(const arma::mat& acc,
 List indices_from_localenvs(const arma::mat& N,
                             const std::vector<arma::mat>& environments,
                             const IntegerVector& measure_flags,
-                            const IntegerVector& comparison_flags)
+                            const IntegerVector& scope_flags)
 {
   const int n = N.n_rows;
   const int M = N.n_cols;
   const int B = environments.size();
-  const bool calculate_overall = comparison_flags[0] == 1;
-  const bool calculate_pairwise = comparison_flags[1] == 1;
+  const bool calculate_multigroup = scope_flags[0] == 1;
+  const bool calculate_pairwise = scope_flags[1] == 1;
 
   arma::vec L_m(M);
   arma::vec p_m(M);
@@ -468,18 +468,18 @@ List indices_from_localenvs(const arma::mat& N,
       L_m = L.row(i).t();
       normalize_composition(L_m, p_m);
 
-      if (calculate_overall) {
+      if (calculate_multigroup) {
         if (measure_flags[0] == 1)
-          accumulate_P_overall(P_acc, b, i, N, T_m, p_m);
+          accumulate_P_multigroup(P_acc, b, i, N, T_m, p_m);
 
         if (measure_flags[1] == 1)
-          accumulate_H_overall(H_acc, b, T_i[i], p_m, logM);
+          accumulate_H_multigroup(H_acc, b, T_i[i], p_m, logM);
 
         if (measure_flags[2] == 1)
-          accumulate_R_overall(R_acc, b, T_i[i], p_m);
+          accumulate_R_multigroup(R_acc, b, T_i[i], p_m);
 
         if (measure_flags[3] == 1)
-          accumulate_D_overall(D_acc, b, T_i[i], p_m, P_m, 2.0 * T * I);
+          accumulate_D_multigroup(D_acc, b, T_i[i], p_m, P_m, 2.0 * T * I);
       }
 
       if (calculate_pairwise) {
@@ -496,22 +496,22 @@ List indices_from_localenvs(const arma::mat& N,
   NumericVector H_out;
   List P_out;
 
-  if (calculate_overall && measure_flags[3] == 1) {
+  if (calculate_multigroup && measure_flags[3] == 1) {
     D_out = NumericVector(B);
     for (int b = 0; b < B; ++b)
       D_out[b] = D_acc[b];
   }
 
-  if (calculate_overall && measure_flags[2] == 1)
+  if (calculate_multigroup && measure_flags[2] == 1)
     R_out = finalize_scalar_index(R_acc, T * I);
 
-  if (calculate_overall && measure_flags[1] == 1)
+  if (calculate_multigroup && measure_flags[1] == 1)
     H_out = finalize_scalar_index(H_acc, T * E);
 
-  if (calculate_overall && measure_flags[0] == 1)
-    P_out = finalize_P_overall(P_acc, B);
+  if (calculate_multigroup && measure_flags[0] == 1)
+    P_out = finalize_P_multigroup(P_acc, B);
 
-  List overall = List::create(
+  List multigroup = List::create(
     _["d"] = D_out,
     _["r"] = R_out,
     _["h"] = H_out,
@@ -528,7 +528,7 @@ List indices_from_localenvs(const arma::mat& N,
   );
 
   return List::create(
-    _["overall"] = overall,
+    _["multigroup"] = multigroup,
     _["pairwise"] = pairwise
   );
 }
@@ -539,7 +539,7 @@ List indices_from_localenvs(const arma::mat& N,
 List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
                     NumericVector bands, double power, int weighting,
                     int normalize, IntegerVector measures,
-                    IntegerVector comparison, int keep_env, int keep_indices,
+                    IntegerVector scope, int keep_env, int keep_indices,
                     int neighbors, int search)
 {
   // Input coordinates and Armadillo views of them
@@ -549,7 +549,7 @@ List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
   arma::mat N(data.begin(), data.nrow(), data.ncol(), false);
   NumericVector BW(bands);             // bandwidth/search-radius values
   IntegerVector measure_flags(measures); // exposure, information, diversity, dissimilarity
-  IntegerVector comparison_flags(comparison); // overall and pairwise switches
+  IntegerVector scope_flags(scope); // multigroup and pairwise switches
 
   const int n = X.size();              // number of focal units
   const int M = N.n_cols;              // number of groups
@@ -559,8 +559,8 @@ List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
   const int neighbors_id = neighbors;  // 0 = radius, 1 = count-based kNN
   const int search_id = search;        // 0 = kd-tree, 1 = brute force
   const bool normalized = normalize == 1; // scale distances by bandwidth
-  const bool calculate_overall = comparison_flags[0] == 1; // compute overall indices
-  const bool calculate_pairwise = comparison_flags[1] == 1; // compute pairwise indices
+  const bool calculate_multigroup = scope_flags[0] == 1; // compute multigroup indices
+  const bool calculate_pairwise = scope_flags[1] == 1; // compute pairwise indices
   const bool store_env = keep_env == 1; // return local environments
   const bool store_indices = keep_indices == 1; // return segregation indices
 
@@ -630,18 +630,18 @@ List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
 
       normalize_composition(L_m, p_m);
 
-      if (calculate_overall) {
+      if (calculate_multigroup) {
         if (measure_flags[0] == 1)
-          accumulate_P_overall(P_acc, b, i, N, T_m, p_m);
+          accumulate_P_multigroup(P_acc, b, i, N, T_m, p_m);
 
         if (measure_flags[1] == 1)
-          accumulate_H_overall(H_acc, b, T_i[i], p_m, logM);
+          accumulate_H_multigroup(H_acc, b, T_i[i], p_m, logM);
 
         if (measure_flags[2] == 1)
-          accumulate_R_overall(R_acc, b, T_i[i], p_m);
+          accumulate_R_multigroup(R_acc, b, T_i[i], p_m);
 
         if (measure_flags[3] == 1)
-          accumulate_D_overall(D_acc, b, T_i[i], p_m, P_m, 2.0 * T * I);
+          accumulate_D_multigroup(D_acc, b, T_i[i], p_m, P_m, 2.0 * T * I);
       }
 
       if (calculate_pairwise) {
@@ -658,22 +658,22 @@ List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
   NumericVector H_out;
   List P_out;
 
-  if (store_indices && calculate_overall && measure_flags[3] == 1) {
+  if (store_indices && calculate_multigroup && measure_flags[3] == 1) {
     D_out = NumericVector(B);
     for (int b = 0; b < B; ++b)
       D_out[b] = D_acc[b];
   }
 
-  if (store_indices && calculate_overall && measure_flags[2] == 1)
+  if (store_indices && calculate_multigroup && measure_flags[2] == 1)
     R_out = finalize_scalar_index(R_acc, T * I);
 
-  if (store_indices && calculate_overall && measure_flags[1] == 1)
+  if (store_indices && calculate_multigroup && measure_flags[1] == 1)
     H_out = finalize_scalar_index(H_acc, T * E);
 
-  if (store_indices && calculate_overall && measure_flags[0] == 1)
-    P_out = finalize_P_overall(P_acc, B);
+  if (store_indices && calculate_multigroup && measure_flags[0] == 1)
+    P_out = finalize_P_multigroup(P_acc, B);
 
-  List overall = List::create(
+  List multigroup = List::create(
     _["d"] = D_out,
     _["r"] = R_out,
     _["h"] = H_out,
@@ -690,7 +690,7 @@ List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
   );
 
   List indices = List::create(
-    _["overall"] = overall,
+    _["multigroup"] = multigroup,
     _["pairwise"] = pairwise
   );
 
@@ -704,12 +704,12 @@ List seg_engine_cpp(NumericVector x, NumericVector y, NumericMatrix data,
 
 // [[Rcpp::export]]
 List seg_indices_env_cpp(NumericMatrix data, NumericMatrix env,
-                         IntegerVector measures, IntegerVector comparison)
+                         IntegerVector measures, IntegerVector scope)
 {
   arma::mat N(data.begin(), data.nrow(), data.ncol(), false);
   arma::mat L(env.begin(), env.nrow(), env.ncol(), false);
   std::vector<arma::mat> environments;
   environments.push_back(L);
 
-  return indices_from_localenvs(N, environments, measures, comparison);
+  return indices_from_localenvs(N, environments, measures, scope);
 }
