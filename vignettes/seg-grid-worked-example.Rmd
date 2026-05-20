@@ -1,0 +1,464 @@
+---
+title: "Worked Example: A 3 by 3 Grid"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Worked Example: A 3 by 3 Grid}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+# Introduction
+
+This vignette walks through a very small example step by step. The goal is to
+make the local environment calculations and the resulting segregation indices
+easy to inspect.
+
+The example uses a 3 by 3 grid of unit cells. Cell centroids are located at
+half-unit coordinates. The upper-left three cells contain only group A, the
+lower-right three cells contain only group B, and the remaining diagonal cells
+contain equal counts of A and B.
+
+```{r setup}
+library(seg)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+composition_scale <- function(name = "A share") {
+  scale_fill_gradient2(
+    low = "#f4a6a6",
+    mid = "#eee6ff",
+    high = "#a8c7ff",
+    midpoint = 0.5,
+    limits = c(0, 1),
+    name = name
+  )
+}
+```
+
+# Data
+
+The grid is constructed so that `x` and `y` are the cell centroids. Because the
+cells have unit dimensions, a bandwidth of 1 includes the focal cell and its
+edge-adjacent neighbors. Diagonal neighbors are at distance `sqrt(2)` and are
+therefore outside the bandwidth.
+
+```{r grid-data}
+grid <- tidyr::expand_grid(
+  y = 2.5 - 0:2,
+  x = 0.5 + 0:2
+) |>
+  mutate(
+    id = row_number(),
+    row = 3 - (y - 0.5),
+    col = x + 0.5,
+    A = case_when(
+      row + col < 4 ~ 10,
+      row + col == 4 ~ 5,
+      TRUE ~ 0
+    ),
+    B = 10 - A
+  ) |>
+  select(id, row, col, x, y, A, B)
+
+grid
+```
+
+```{r grid-map}
+grid |>
+  mutate(A_share = A / (A + B)) |>
+  ggplot(aes(x = x, y = y, fill = A_share)) +
+  geom_tile(color = "white", linewidth = 0.8, width = 1, height = 1) +
+  geom_text(
+    aes(x = x - 0.42, y = y + 0.38, label = id),
+    inherit.aes = FALSE,
+    size = 3,
+    hjust = 0,
+    vjust = 1
+  ) +
+  geom_text(aes(label = paste0("A=", A, "\nB=", B)), size = 3.5) +
+  coord_equal() +
+  composition_scale() +
+  theme_minimal()
+```
+
+# Index Formulas
+
+The examples below calculate two multigroup indices. With two groups, these
+are also equal to their pairwise versions.
+
+For each focal cell `i`, let `t_i` be the observed population count in the cell.
+Let `p_iA` and `p_iB` be the local environment proportions for the two groups.
+Let `P_A` and `P_B` be the regional proportions. In this example, every cell has
+10 people and the region is exactly balanced, so `P_A = P_B = 0.5`.
+
+The information theory index is
+
+\[
+H = 1 - \frac{\sum_i t_i E_i}{T E},
+\]
+
+where `E_i` is the entropy of the local environment and `E` is the regional
+entropy.
+
+The dissimilarity index is
+
+\[
+D = \frac{\sum_i t_i \sum_m |p_{im} - P_m|}{2 T I},
+\]
+
+where `I = sum_m P_m(1 - P_m)`.
+
+The small helper below is intentionally written with ordinary `dplyr`
+operations. It returns both the cell-level calculations and the final indices.
+
+```{r index-helper}
+xlogx <- function(x) {
+  if_else(x > 0, x * log(x), 0)
+}
+
+calculate_indices <- function(local_env, label) {
+  regional <- grid |>
+    summarise(
+      T_A = sum(A),
+      T_B = sum(B),
+      T = T_A + T_B
+    ) |>
+    mutate(
+      P_A = T_A / T,
+      P_B = T_B / T,
+      E = -(xlogx(P_A) + xlogx(P_B)) / log(2),
+      I = P_A * (1 - P_A) + P_B * (1 - P_B)
+    )
+
+  unit_calculations <- grid |>
+    select(id, t_A = A, t_B = B) |>
+    mutate(t_i = t_A + t_B) |>
+    left_join(local_env, by = "id") |>
+    mutate(
+      local_total = A + B,
+      p_A = A / local_total,
+      p_B = B / local_total,
+      E_i = -(xlogx(p_A) + xlogx(p_B)) / log(2),
+      H_contribution = t_i * E_i,
+      D_contribution = t_i * (
+        abs(p_A - regional$P_A) + abs(p_B - regional$P_B)
+      )
+    )
+
+  indices <- unit_calculations |>
+    summarise(
+      scenario = label,
+      information = 1 - sum(H_contribution) / (regional$T * regional$E),
+      dissimilarity = sum(D_contribution) / (2 * regional$T * regional$I)
+    )
+
+  list(
+    regional = regional,
+    units = unit_calculations,
+    indices = indices
+  )
+}
+```
+
+# No Spatial Weighting
+
+Without spatial weighting, each local environment is just the observed
+composition of the focal cell. This is the same calculation that `spseg()`
+performs when `bands = 0`.
+
+```{r no-spatial-local-env}
+raw_env <- grid |>
+  select(id, A, B)
+
+raw_env
+```
+
+```{r no-spatial-indices}
+raw_calc <- calculate_indices(raw_env, "No spatial weighting")
+
+raw_calc$regional
+raw_calc$units |>
+  select(id, t_i, A, B, p_A, p_B, E_i, H_contribution, D_contribution)
+```
+
+# Bandwidth 1 Without Distance Weights
+
+Now use a radius bandwidth of 1. The first table lists every focal-neighbor
+pair inside the bandwidth. The unweighted local environment gives each listed
+neighbor, including the focal cell, equal weight.
+
+```{r radius-neighbors}
+neighbor_pairs <- grid |>
+  select(focal_id = id, focal_x = x, focal_y = y) |>
+  tidyr::crossing(
+    grid |>
+      select(neighbor_id = id, neighbor_x = x, neighbor_y = y, A, B)
+  ) |>
+  mutate(
+    distance = sqrt(
+      (focal_x - neighbor_x)^2 + (focal_y - neighbor_y)^2
+    )
+  ) |>
+  filter(distance <= 1) |>
+  arrange(focal_id, distance, neighbor_id)
+
+neighbor_pairs
+```
+
+```{r unweighted-env}
+unweighted_env <- neighbor_pairs |>
+  mutate(weight = 1) |>
+  group_by(id = focal_id) |>
+  summarise(
+    neighbors = paste(neighbor_id, collapse = ", "),
+    A = sum(weight * A) / sum(weight),
+    B = sum(weight * B) / sum(weight),
+    .groups = "drop"
+  )
+
+unweighted_env
+```
+
+```{r unweighted-indices}
+unweighted_calc <- calculate_indices(
+  unweighted_env |> select(id, A, B),
+  "Bandwidth 1, unweighted"
+)
+
+unweighted_calc$units |>
+  select(id, t_i, A, B, p_A, p_B, E_i, H_contribution, D_contribution)
+```
+
+# Bandwidth 1 With Distance Weights
+
+For the weighted example, use the exponential kernel. With bandwidth
+normalization, the weight is `exp(-distance / bandwidth)`. Since the bandwidth
+is 1, the focal cell has weight `exp(0) = 1` and each edge-adjacent neighbor
+has weight `exp(-1)`.
+
+```{r weighted-env}
+weighted_env <- neighbor_pairs |>
+  mutate(weight = exp(-distance / 1)) |>
+  group_by(id = focal_id) |>
+  summarise(
+    neighbors = paste(neighbor_id, collapse = ", "),
+    weight_sum = sum(weight),
+    A = sum(weight * A) / weight_sum,
+    B = sum(weight * B) / weight_sum,
+    .groups = "drop"
+  )
+
+weighted_env
+```
+
+```{r weighted-indices}
+weighted_calc <- calculate_indices(
+  weighted_env |> select(id, A, B),
+  "Bandwidth 1, exponential"
+)
+
+weighted_calc$units |>
+  select(id, t_i, A, B, p_A, p_B, E_i, H_contribution, D_contribution)
+```
+
+# Compare with spseg()
+
+The hand calculations above should match `spseg()` exactly. The calls below
+calculate only the information theory and dissimilarity indices, using
+multigroup scope to keep the output focused.
+
+```{r spseg-comparison}
+coords <- as.matrix(grid[, c("x", "y")])
+counts <- as.matrix(grid[, c("A", "B")])
+
+spseg_to_table <- function(result, scenario) {
+  as.data.frame(result, what = "indices") |>
+    select(measure, value) |>
+    tidyr::pivot_wider(names_from = measure, values_from = value) |>
+    transmute(
+      scenario = scenario,
+      information = h,
+      dissimilarity = d
+    )
+}
+
+spseg_raw <- spseg(
+  coords,
+  data = counts,
+  bands = 0,
+  weighting = "unweighted",
+  measures = c("information", "dissimilarity"),
+  scope = "multigroup"
+)
+
+spseg_unweighted <- spseg(
+  coords,
+  data = counts,
+  bands = 1,
+  weighting = "unweighted",
+  measures = c("information", "dissimilarity"),
+  scope = "multigroup",
+  output = "full"
+)
+
+spseg_weighted <- spseg(
+  coords,
+  data = counts,
+  bands = 1,
+  weighting = "exponential",
+  measures = c("information", "dissimilarity"),
+  scope = "multigroup",
+  output = "full"
+)
+
+manual_indices <- bind_rows(
+  raw_calc$indices,
+  unweighted_calc$indices,
+  weighted_calc$indices
+) |>
+  mutate(source = "dplyr")
+
+spseg_indices <- bind_rows(
+  spseg_to_table(spseg_raw, "No spatial weighting"),
+  spseg_to_table(spseg_unweighted, "Bandwidth 1, unweighted"),
+  spseg_to_table(spseg_weighted, "Bandwidth 1, exponential")
+) |>
+  mutate(source = "spseg")
+```
+
+The next two figures compare the local environments produced by the manual
+`dplyr` calculations with the local environments returned by `spseg()`. The
+labels report the local environment counts, not the raw cell counts.
+
+```{r local-env-plot-helper}
+index_labels <- bind_rows(manual_indices, spseg_indices) |>
+  mutate(
+    facet_label = paste0(
+      source,
+      "\nH=", sprintf("%.3f", information),
+      "\nD=", sprintf("%.3f", dissimilarity)
+    )
+  ) |>
+  select(scenario, source, facet_label)
+
+local_env_plot_data <- function(manual_env, spseg_result, scenario) {
+  spseg_env <- as.data.frame(spseg_result$env[[1]])
+  scenario_labels <- index_labels |>
+    filter(.data$scenario == .env$scenario)
+
+  bind_rows(
+    grid |>
+      select(id, x, y) |>
+      left_join(manual_env |> select(id, A, B), by = "id") |>
+      mutate(source = "dplyr"),
+    grid |>
+      select(id, x, y) |>
+      mutate(
+        A = spseg_env$A,
+        B = spseg_env$B,
+        source = "spseg"
+      )
+  ) |>
+    left_join(
+      scenario_labels,
+      by = "source"
+    ) |>
+    mutate(
+      facet_label = factor(
+        facet_label,
+        levels = scenario_labels |>
+          arrange(match(source, c("dplyr", "spseg"))) |>
+          pull(facet_label)
+      ),
+      A_share = A / (A + B),
+      label = paste0(
+        "A=", round(A, 2),
+        "\nB=", round(B, 2)
+      )
+    )
+}
+
+plot_local_env_comparison <- function(plot_data) {
+  ggplot(plot_data, aes(x = x, y = y, fill = A_share)) +
+    geom_tile(color = "white", linewidth = 0.8, width = 1, height = 1) +
+    geom_text(
+      aes(x = x - 0.42, y = y + 0.38, label = id),
+      inherit.aes = FALSE,
+      size = 3,
+      hjust = 0,
+      vjust = 1
+    ) +
+    geom_text(aes(label = label), size = 3.2) +
+    facet_wrap(~ facet_label) +
+    coord_equal() +
+    composition_scale("Local A share") +
+    theme_minimal()
+}
+```
+
+```{r unweighted-local-env-map}
+unweighted_plot_data <- local_env_plot_data(
+  unweighted_env,
+  spseg_unweighted,
+  "Bandwidth 1, unweighted"
+)
+
+plot_local_env_comparison(unweighted_plot_data)
+
+tibble(
+  local_environments_equal = isTRUE(all.equal(
+    unweighted_plot_data |> filter(source == "dplyr") |> arrange(id) |>
+      select(A, B),
+    unweighted_plot_data |> filter(source == "spseg") |> arrange(id) |>
+      select(A, B),
+    tolerance = 1e-12
+  ))
+)
+```
+
+```{r weighted-local-env-map}
+weighted_plot_data <- local_env_plot_data(
+  weighted_env,
+  spseg_weighted,
+  "Bandwidth 1, exponential"
+)
+
+plot_local_env_comparison(weighted_plot_data)
+
+tibble(
+  local_environments_equal = isTRUE(all.equal(
+    weighted_plot_data |> filter(source == "dplyr") |> arrange(id) |>
+      select(A, B),
+    weighted_plot_data |> filter(source == "spseg") |> arrange(id) |>
+      select(A, B),
+    tolerance = 1e-12
+  ))
+)
+```
+
+```{r equality-check}
+comparison <- manual_indices |>
+  select(-source) |>
+  inner_join(
+    spseg_indices |> select(-source),
+    by = "scenario",
+    suffix = c("_dplyr", "_spseg")
+  ) |>
+  mutate(
+    information_equal = abs(information_dplyr - information_spseg) < 1e-12,
+    dissimilarity_equal = abs(dissimilarity_dplyr - dissimilarity_spseg) < 1e-12
+  )
+
+comparison |>
+  select(scenario, information_equal, dissimilarity_equal)
+```
