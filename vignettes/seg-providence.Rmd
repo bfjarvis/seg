@@ -31,16 +31,14 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-This vignette develops an empirical example using 2010 Census block data for
+This vignette develops an empirical example using 2000 Census block data for
 Providence, Rhode Island. It is intentionally written as a reproducible import
 and preparation script: while the package is under development, the raw data are
 read from local source files, joined to block geometries, recoded into mutually
-exclusive race and Hispanic-origin categories, and then used to exercise the
-multi-group and pairwise segregation workflows.
+exclusive race categories, and then used to exercise the multi-group and 
+pairwise segregation workflows.
 
-The population data come from IPUMS NHGIS table P5, Hispanic or Latino Origin
-by Race, for 2010 Census blocks in Rhode Island. The block geometries are 2010
-Census TIGER/Line block shapes for Rhode Island.
+The aim is to reproduce results for a single city presented in Reardon et al. 2008.
 
 ```{r source-check, eval = TRUE}
 have_resources
@@ -50,11 +48,16 @@ If the result above is `FALSE`, the local source files are not available and
 the executable chunks below are skipped. The full import code is left in place
 so the workflow can be rerun once the source files are available.
 
+The population data come from IPUMS NHGIS table P5, Hispanic or Latino Origin
+by Race, for 2010 Census blocks in Rhode Island. The block geometries are 2010
+Census TIGER/Line block shapes for Rhode Island.
+
 ```{r setup}
 devtools::load_all()
 library(sf)
 library(tidyverse)
 library(ggplot2)
+group_cols <- c("White", "Black", "Asian", "Hispanic")
 ```
 
 # Import Source Data
@@ -93,7 +96,7 @@ race <- bind_rows(
 ) |> select(GISJOIN, YEAR, COUNTY, STATE, PLACEA, starts_with("FYF")) |> 
   mutate(White=FYF001, 
          Black=FYF002,
-         Asian=FYF004,
+         Asian=FYF004+FYF005,
          Hispanic=FYF008+FYF009+FYF010+FYF011+FYF012+FYF013+FYF014)
 str(race)
 ```
@@ -144,42 +147,33 @@ because block centroids are farther apart than this, it reproduces the original
 block composition.
 
 ```{r local-environments}
-providence |>
-  filter(PLACEA==59000 & Total>0) |> 
-  select(White, Black, Asian, Hispanic) |> 
+bands<-c(1, 500, 1000, 2000, 4000)
+providence_seg<-
+  providence |>
+  select(all_of(group_cols)) |>
 spseg(
-  bands = c(1, 500, 1000, 2000, 4000),
+  bands = bands,
   weighting = "biweight",
-  power = 3,
+  power = 2,
   neighbors = "radius",
   search="kdtree",
   normalize = TRUE,
-  comparison = "overall",
+  scope = "both",
   output = "full"
 )
-
-providence_env
-stopifnot(inherits(providence_env, "seg_result"))
-stopifnot(length(providence_env$env) == length(env_bands))
 ```
 
 Convert local environment counts to local Hispanic shares for mapping.
 
 ```{r local-share-data}
-local_maps <- st_as_sf(providence_env, bands = env_bands, shape = "long")
-local_maps$TotalRaw <- providence$Total
-local_maps$Total <- rowSums(st_drop_geometry(local_maps)[, group_cols])
-local_maps$hispanic_share <- local_maps$Hispanic / local_maps$Total
-local_maps$hispanic_share <- ifelse(local_maps$TotalRaw <= 1e-12, NA,
-                                    local_maps$hispanic_share)
-local_maps$band <- factor(paste0(local_maps$band, " m"),
-                          levels = paste0(env_bands, " m"))
-summary(local_maps$hispanic_share)
+local_maps <- st_as_sf(providence_seg, shape = "long") |> 
+  mutate(Total=White+Black+Asian+Hispanic) |> 
+  mutate(across(c(White,Black,Asian,Hispanic),~.x/Total,.names = "{.col}_Share")) 
 ```
 
 ```{r local-share-map}
 ggplot(local_maps) +
-  geom_sf(aes(fill = hispanic_share), color = NA) +
+  geom_sf(aes(fill = Hispanic_Share), color = NA) +
   facet_wrap(~ band,nrow=2) +
   scale_fill_viridis_c(labels = function(x) paste0(round(100 * x), "%"),na.value = 'gray70') +
   labs(fill = "Hispanic share") +
@@ -188,73 +182,22 @@ ggplot(local_maps) +
 
 # Multi-Band Segregation
 
-Now compute multi-group segregation indices across several bandwidths. This
-uses the unified multi-band engine and returns only the indices.
+Now extract segregation indices across the key bandwidths presented in Reardon et al. 2008
+The ratio of segregation based on the 500m and 4km band is also calculated.
 
 ```{r multiband-indices}
-bands <- c(250, 500, 1000, 2000, 4000, 6000, 8000, 10000)
-
-providence_seg <- spseg(
-  providence[, group_cols],
-  bands = bands,
-  weighting = "biweight",
-  power = 3,
-  normalize = TRUE,
-  neighbors="radius",
-  measures = c("dissimilarity", "information", "diversity"),
-  comparison = "both",
-  output = "indices"
-)
-
-providence_seg
-stopifnot(inherits(providence_seg, "seg_result"))
-stopifnot(identical(providence_seg$bands, bands))
-stopifnot(is.null(providence_seg$env))
+bind_rows(
+  as.data.frame(providence_seg, what='pairwise') |> 
+    filter(group_a=='White') ,
+as.data.frame(providence_seg, what='indices')) |> 
+  filter(measure=='h',
+         band %in% c(500,4000)) |> 
+  arrange(group_a,group_b,band) |> 
+  group_by(group_b) |> 
+  mutate(ratio=value/lag(value)) 
+  
 ```
 
-The overall indices summarize multi-group segregation at each bandwidth.
-
-```{r overall-indices}
-overall_indices <- as.data.frame(providence_seg, what = "indices")
-overall_indices
-
-stopifnot(nrow(overall_indices) == length(bands) * 3)
-stopifnot(all(is.finite(overall_indices$value)))
-```
-
-```{r overall-index-plot}
-ggplot(overall_indices, aes(x = band, y = value, color = measure)) +
-  geom_line() +
-  geom_point() +
-  labs(x = "Bandwidth (m)", y = "Index value", color = "Measure") +
-  theme_minimal()
-```
-
-# Pairwise Segregation
-
-The same object also contains pairwise versions of the scalar indices. These
-are returned separately from the overall multi-group indices.
-
-```{r pairwise-indices}
-pairwise_indices <- as.data.frame(providence_seg, what = "pairwise")
-head(pairwise_indices)
-
-expected_pairs <- choose(length(group_cols), 2)
-stopifnot(nrow(pairwise_indices) == length(bands) * 3 * expected_pairs)
-stopifnot(all(is.finite(pairwise_indices$value)))
-```
-
-```{r pairwise-dissimilarity-plot}
-pairwise_d <- pairwise_indices[pairwise_indices$measure == "d", ]
-pairwise_d$pair <- paste(pairwise_d$group_a, pairwise_d$group_b, sep = "-")
-
-ggplot(pairwise_d[grepl("White",pairwise_d$pair),], 
-       aes(x = band, y = value, color = pair)) +
-  geom_line() +
-  geom_point() +
-  labs(x = "Bandwidth (m)", y = "Pairwise dissimilarity", color = "Pair") +
-  theme_minimal()
-```
 
 # Source
 
