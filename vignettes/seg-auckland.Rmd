@@ -23,7 +23,7 @@ are included as external package files so the examples can be run after the
 package is installed.
 
 ```{r setup}
-devtools::load_all()
+library(seg)
 library(sf)
 library(ggplot2)
 ```
