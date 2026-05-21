@@ -72,7 +72,15 @@ stores local environments without calculating indices.}
 \item{verbose}{Logical. If `TRUE`, report progress messages.}
 
 \item{...}{Additional population-surface options, such as `cellsize`,
-`celldim`, `nrow`, `ncol`, `max_iter`, or `converge`.}
+`celldim`, `nrow`, `ncol`, `max_iter`, `converge`,
+`surface_geometry`. Grid and pycnophylactic surfaces use
+[terra::rasterize()] to assign source polygons to generated grid-cell
+centroids. Non-empty polygons that receive no centroid-assigned cell
+contribute their counts to the cell containing an interior point of the
+polygon. Set `surface_geometry = "points"` to store centroid point
+geometries, or `surface_geometry = "polygons"`/`TRUE` to construct and
+store square grid-cell geometries for mapping. By default, generated
+surfaces store only centroid coordinates and population counts.}
 }
 \value{
 An S3 object of class `seg_result`. It is a list with fields

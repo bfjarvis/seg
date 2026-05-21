@@ -133,7 +133,8 @@ The default `surface="raw"` uses the area-unit data directly. For areal data, it
 auck_grid_seg <- spseg(
   auck[, c("Korean", "Non_Korean")],
   surface = "grid",
-  cellsize = 400,
+  surface_geometry = 'polygons',
+  cellsize = 200,
   bands = c(1, 2000, 5000),
   output = "full"
 )
@@ -155,8 +156,8 @@ The `surface="pycno"` option also constructs a grid, then applies groupwise pycn
 auck_pycno_seg <- spseg(
   auck[, c("Korean", "Non_Korean")],
   surface = "pycno",
-  celldim = 400,
-  converge = 2,
+  surface_geometry = 'polygons',
+  celldim = 200,
   bands = c(1,2000, 5000),
   output = "full"
 )
@@ -183,15 +184,19 @@ auck_env <- rbind(auck_poly_env,auck_grid_env,auck_pycno_env)
 auck_env$Total <- with(auck_env, Korean + Non_Korean)
 auck_env$Korean_Share <- with(auck_env, Korean / Total)
 
-ggplot(auck_env) +
-  geom_sf(aes(geometry = geometry, fill = Korean_Share+0.001), color = NA) +
+auck_env[auck_env$surface!='polygon',] |> 
+ggplot(aes(geometry = geometry, 
+              fill = Korean_Share+0.001,
+              alpha=log(Total+1))) +
+  geom_sf(color=NA,linewidth=0) +
   scale_fill_viridis_c(
     labels = function(x) paste0(round(100 * x, 1), "%"),
     na.value = "grey90",transform="log"
   ) +
   facet_grid(rows=vars(surface),cols=vars(band),switch="y") +
-  labs(fill = "Pycno local share") +
-  theme_void()
+  labs(fill = "local share") +
+  theme_void()+
+  guides(color='none',alpha='none')
 ```
 
 And we can plot the segregation indices across bandwidths for all three approaches

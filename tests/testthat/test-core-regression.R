@@ -6,12 +6,6 @@ toy_grid <- function(cols = 1:2) {
   )
 }
 
-surface_totals_by_polygon <- function(result, source_sf) {
-  zone_ids <- seg:::spseg_surface_polygon_ids(result$coords, source_sf)
-  totals <- rowsum(result$data, zone_ids)
-  totals[as.character(seq_len(nrow(source_sf))), , drop = FALSE]
-}
-
 test_that("spseg returns S3 index results by default", {
   toy <- toy_grid()
   result <- spseg(toy$coords, toy$values)
@@ -222,23 +216,200 @@ test_that("grid population surfaces preserve source polygon totals", {
     sf::st_make_grid(cellsize = 1)
   grid_sf <- sf::st_sf(geometry = geom)
 
-  result <- spseg(
+  checked <- suppressMessages(seg:::chksegdata(grid_sf, segdata[, 1:2]))
+  surface <- seg:::spseg_surface(
+    x = grid_sf,
+    coords = checked$coords,
+    data = checked$data,
+    surface = "grid",
+    args = list(nrow = 10, ncol = 10),
+    verbose = FALSE
+  )
+
+  result <- spseg(grid_sf, data = segdata[, 1:2], surface = "grid",
+                  nrow = 10, ncol = 10, bands = 2, output = "localenv")
+  expect_s3_class(result, "seg_result")
+  expect_null(result$geometry)
+  surface_totals <- rowsum(surface$data, surface$id)
+  expect_equal(unname(surface_totals), unname(as.matrix(segdata[, 1:2])),
+               tolerance = 1e-8)
+
+  result_with_points <- spseg(
     grid_sf,
     data = segdata[, 1:2],
     surface = "grid",
+    surface_geometry = "points",
     nrow = 10,
     ncol = 10,
     bands = 2,
     output = "localenv"
   )
+  expect_s3_class(result_with_points$geometry, "sfc")
+  expect_equal(
+    as.character(unique(sf::st_geometry_type(result_with_points$geometry))),
+    "POINT"
+  )
 
-  expect_s3_class(result, "seg_result")
-  expect_s3_class(result$geometry, "sfc")
-  expect_equal(as.character(unique(sf::st_geometry_type(result$geometry))),
-               "POLYGON")
-  surface_totals <- surface_totals_by_polygon(result, grid_sf)
-  expect_equal(unname(surface_totals), unname(as.matrix(segdata[, 1:2])),
-               tolerance = 1e-8)
+  result_with_geometry <- spseg(
+    grid_sf,
+    data = segdata[, 1:2],
+    surface = "grid",
+    surface_geometry = TRUE,
+    nrow = 10,
+    ncol = 10,
+    bands = 2,
+    output = "localenv"
+  )
+  expect_s3_class(result_with_geometry$geometry, "sfc")
+  expect_equal(
+    as.character(unique(sf::st_geometry_type(result_with_geometry$geometry))),
+    "POLYGON"
+  )
+})
+
+test_that("raw, grid, and pycno surfaces preserve overall group totals", {
+  geom <- sf::st_make_grid(
+    sf::st_as_sfc(sf::st_bbox(c(xmin = 0, ymin = 0, xmax = 2, ymax = 2))),
+    n = c(2, 2)
+  )
+  values <- matrix(c(10, 0,
+                     0, 10,
+                     5, 5,
+                     3, 7),
+                   ncol = 2, byrow = TRUE,
+                   dimnames = list(NULL, c("a", "b")))
+  x <- sf::st_sf(a = values[, 1], b = values[, 2], geometry = geom)
+  checked <- suppressMessages(seg:::chksegdata(x[, c("a", "b")]))
+
+  raw <- seg:::spseg_surface(
+    x = x[, c("a", "b")],
+    coords = checked$coords,
+    data = checked$data,
+    surface = "raw",
+    args = list(),
+    verbose = FALSE
+  )
+  grid <- seg:::spseg_surface(
+    x = x[, c("a", "b")],
+    coords = checked$coords,
+    data = checked$data,
+    surface = "grid",
+    args = list(celldim = 0.5),
+    verbose = FALSE
+  )
+  pycno <- seg:::spseg_surface(
+    x = x[, c("a", "b")],
+    coords = checked$coords,
+    data = checked$data,
+    surface = "pycno",
+    args = list(celldim = 0.5, converge = 1),
+    verbose = FALSE
+  )
+
+  expected <- colSums(values)
+  expect_equal(unname(colSums(raw$data)), unname(expected), tolerance = 1e-8)
+  expect_equal(unname(colSums(grid$data)), unname(expected), tolerance = 1e-8)
+  expect_equal(unname(colSums(pycno$data)), unname(expected), tolerance = 1e-8)
+})
+
+test_that("grid surfaces assign missing non-empty polygons to fallback cells", {
+  tiny <- sf::st_polygon(list(rbind(c(0, 0), c(0.1, 0), c(0.1, 0.1),
+                                    c(0, 0.1), c(0, 0))))
+  large <- sf::st_polygon(list(rbind(c(4, 4), c(10, 4), c(10, 10),
+                                     c(4, 10), c(4, 4))))
+  x <- sf::st_sf(
+    a = c(10, 20),
+    b = c(0, 5),
+    geometry = sf::st_sfc(tiny, large)
+  )
+  checked <- suppressMessages(seg:::chksegdata(x[, c("a", "b")]))
+
+  result <- expect_no_warning(
+    seg:::spseg_surface(
+      x = x[, c("a", "b")],
+      coords = checked$coords,
+      data = checked$data,
+      surface = "grid",
+      args = list(nrow = 2, ncol = 2),
+      verbose = FALSE
+    )
+  )
+
+  expect_true(1L %in% result$fallback$ids)
+  expect_equal(
+    colSums(result$data),
+    colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")]))),
+    tolerance = 1e-8
+  )
+  assigned <- !is.na(result$id)
+  surface_totals <- rowsum(result$data[assigned, , drop = FALSE],
+                           result$id[assigned])
+  expect_equal(
+    unname(surface_totals["2", , drop = FALSE]),
+    unname(as.matrix(sf::st_drop_geometry(x[2, c("a", "b")]))),
+    tolerance = 1e-8
+  )
+
+  pycno <- expect_no_warning(
+    seg:::spseg_surface(
+      x = x[, c("a", "b")],
+      coords = checked$coords,
+      data = checked$data,
+      surface = "pycno",
+      args = list(nrow = 2, ncol = 2, converge = 1),
+      verbose = FALSE
+    )
+  )
+  expect_equal(
+    unname(colSums(pycno$data)),
+    unname(colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")])))),
+    tolerance = 1e-8
+  )
+})
+
+test_that("grid fallback merges multiple missing polygons into represented cells", {
+  tiny_1 <- sf::st_polygon(list(rbind(c(0, 0), c(0.1, 0), c(0.1, 0.1),
+                                      c(0, 0.1), c(0, 0))))
+  tiny_2 <- sf::st_polygon(list(rbind(c(0.12, 0), c(0.22, 0),
+                                      c(0.22, 0.1), c(0.12, 0.1),
+                                      c(0.12, 0))))
+  large <- sf::st_polygon(list(rbind(c(0.3, 0), c(5, 0), c(5, 5),
+                                     c(0.3, 5), c(0.3, 0))))
+  x <- sf::st_sf(
+    a = c(10, 7, 20),
+    b = c(1, 3, 5),
+    geometry = sf::st_sfc(tiny_1, tiny_2, large)
+  )
+  checked <- suppressMessages(seg:::chksegdata(x[, c("a", "b")]))
+
+  result <- expect_no_warning(
+    seg:::spseg_surface(
+      x = x[, c("a", "b")],
+      coords = checked$coords,
+      data = checked$data,
+      surface = "grid",
+      args = list(nrow = 1, ncol = 1),
+      verbose = FALSE
+    )
+  )
+
+  expect_true(all(c(1L, 2L) %in% result$fallback$ids))
+  fallback_cells <- result$fallback$cells[
+    match(c(1L, 2L), result$fallback$ids)
+  ]
+  expect_length(unique(fallback_cells), 1L)
+  expect_equal(
+    unname(colSums(result$data)),
+    unname(colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")])))),
+    tolerance = 1e-8
+  )
+  expect_equal(result$id, 3L)
+  expect_equal(
+    unname(result$data),
+    unname(matrix(colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")]))),
+                  nrow = 1)),
+    tolerance = 1e-8
+  )
 })
 
 test_that("pycnophylactic surfaces preserve source polygon totals", {
@@ -254,12 +425,21 @@ test_that("pycnophylactic surfaces preserve source polygon totals", {
                    dimnames = list(NULL, c("a", "b")))
   x <- sf::st_sf(a = values[, 1], b = values[, 2], geometry = geom)
 
+  checked <- suppressMessages(seg:::chksegdata(x[, c("a", "b")]))
+  surface <- seg:::spseg_surface(
+    x = x[, c("a", "b")],
+    coords = checked$coords,
+    data = checked$data,
+    surface = "pycno",
+    args = list(celldim = 0.5, converge = 1),
+    verbose = FALSE
+  )
   result <- spseg(x, bands = 1, surface = "pycno", celldim = 0.5,
                   converge = 1, output = "localenv")
 
   expect_s3_class(result, "seg_result")
   expect_gt(nrow(result$data), nrow(x))
-  surface_totals <- surface_totals_by_polygon(result, x)
+  surface_totals <- rowsum(surface$data, surface$id)
   expect_equal(unname(surface_totals), unname(values), tolerance = 1e-8)
 })
 

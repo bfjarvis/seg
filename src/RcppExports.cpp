@@ -49,18 +49,18 @@ BEGIN_RCPP
 END_RCPP
 }
 // seg_pycno_cpp
-NumericMatrix seg_pycno_cpp(IntegerVector zone_ids, NumericMatrix pops, int nx, int ny, int max_iter, double converge);
-RcppExport SEXP _seg_seg_pycno_cpp(SEXP zone_idsSEXP, SEXP popsSEXP, SEXP nxSEXP, SEXP nySEXP, SEXP max_iterSEXP, SEXP convergeSEXP) {
+NumericMatrix seg_pycno_cpp(IntegerVector zone_ids, NumericMatrix values, int nx, int ny, int max_iter, double converge);
+RcppExport SEXP _seg_seg_pycno_cpp(SEXP zone_idsSEXP, SEXP valuesSEXP, SEXP nxSEXP, SEXP nySEXP, SEXP max_iterSEXP, SEXP convergeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< IntegerVector >::type zone_ids(zone_idsSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type pops(popsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type values(valuesSEXP);
     Rcpp::traits::input_parameter< int >::type nx(nxSEXP);
     Rcpp::traits::input_parameter< int >::type ny(nySEXP);
     Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
     Rcpp::traits::input_parameter< double >::type converge(convergeSEXP);
-    rcpp_result_gen = Rcpp::wrap(seg_pycno_cpp(zone_ids, pops, nx, ny, max_iter, converge));
+    rcpp_result_gen = Rcpp::wrap(seg_pycno_cpp(zone_ids, values, nx, ny, max_iter, converge));
     return rcpp_result_gen;
 END_RCPP
 }

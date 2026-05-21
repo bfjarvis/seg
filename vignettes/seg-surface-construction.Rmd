@@ -1,0 +1,308 @@
+---
+title: "Population Surface Construction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Population Surface Construction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5
+)
+```
+
+# Introduction
+
+When `spseg()` is called with `surface = "grid"` or `surface = "pycno"`,
+polygon counts are first moved to a regular square grid. This vignette walks
+through that step with small examples. The goal is to make clear what happens
+when every polygon receives grid cells directly, and what happens when one or
+more populated polygons are too small to receive a grid-cell centroid.
+
+```{r setup}
+library(seg)
+library(sf)
+library(dplyr)
+library(ggplot2)
+
+composition_scale <- function(name = "A share") {
+  scale_fill_gradient2(
+    low = "#f4a6a6",
+    mid = "#eee6ff",
+    high = "#a8c7ff",
+    midpoint = 0.5,
+    limits = c(0, 1),
+    name = name
+  )
+}
+
+make_rect <- function(xmin, ymin, xmax, ymax) {
+  st_polygon(list(rbind(
+    c(xmin, ymin),
+    c(xmax, ymin),
+    c(xmax, ymax),
+    c(xmin, ymax),
+    c(xmin, ymin)
+  )))
+}
+
+surface_from_polygons <- function(x, nrow, ncol, surface = "grid") {
+  checked <- suppressMessages(seg:::chksegdata(x[, c("A", "B")]))
+  seg:::spseg_surface(
+    x = x[, c("A", "B")],
+    coords = checked$coords,
+    data = checked$data,
+    surface = surface,
+    args = list(
+      nrow = nrow,
+      ncol = ncol,
+      surface_geometry = "polygons",
+      converge = 1
+    ),
+    verbose = FALSE
+  )
+}
+
+surface_to_sf <- function(surface) {
+  st_sf(
+    cell = seq_len(nrow(surface$data)),
+    source_id = surface$id,
+    as.data.frame(surface$data),
+    geometry = surface$geometry
+  ) |>
+    mutate(total = A + B, A_share = A / total)
+}
+
+source_to_sf <- function(x) {
+  x |>
+    mutate(
+      source_id = row_number(),
+      total = A + B,
+      A_share = A / total
+    )
+}
+
+plot_sources <- function(x, title) {
+  centroids <- st_point_on_surface(st_geometry(x))
+  labels <- cbind(st_drop_geometry(x), st_coordinates(centroids))
+
+  ggplot(x) +
+    geom_sf(aes(fill = A_share), color = "white", linewidth = 0.8) +
+    geom_text(
+      data = labels,
+      aes(X, Y, label = paste0("id ", source_id, "\nA=", A, "\nB=", B)),
+      size = 3
+    ) +
+    coord_sf(expand = FALSE) +
+    composition_scale() +
+    labs(title = title) +
+    theme_minimal()
+}
+
+plot_surface <- function(x, title) {
+  centroids <- st_point_on_surface(st_geometry(x))
+  labels <- cbind(st_drop_geometry(x), st_coordinates(centroids))
+
+  ggplot(x) +
+    geom_sf(aes(fill = A_share), color = "white", linewidth = 0.8) +
+    geom_text(
+      data = labels,
+      aes(
+        X, Y,
+        label = paste0("cell ", cell, "\nsource ", source_id,
+                       "\nA=", round(A, 1), "\nB=", round(B, 1))
+      ),
+      size = 2.8
+    ) +
+    coord_sf(expand = FALSE) +
+    composition_scale("Grid A share") +
+    labs(title = title) +
+    theme_minimal()
+}
+
+count_check <- function(source, surface) {
+  tibble(
+    group = c("A", "B"),
+    source_total = colSums(st_drop_geometry(source[, c("A", "B")])),
+    surface_total = colSums(surface$data),
+    equal = abs(source_total - surface_total) < 1e-8
+  )
+}
+```
+
+# Case 1: No Merge Required
+
+Start with four square polygons and a two-by-two grid. Each polygon contains
+one grid-cell centroid, so the first-pass rasterization assigns every polygon
+to one cell. No fallback merge is needed.
+
+```{r no-merge-data}
+no_merge <- st_sf(
+  A = c(10, 0, 5, 2),
+  B = c(0, 10, 5, 8),
+  geometry = st_sfc(
+    make_rect(0, 0, 1, 1),
+    make_rect(1, 0, 2, 1),
+    make_rect(0, 1, 1, 2),
+    make_rect(1, 1, 2, 2)
+  )
+) |>
+  source_to_sf()
+
+no_merge_grid <- surface_from_polygons(no_merge, nrow = 2, ncol = 2)
+no_merge_surface <- surface_to_sf(no_merge_grid)
+```
+
+```{r no-merge-source-map}
+plot_sources(no_merge, "Source polygons: no merge required")
+```
+
+```{r no-merge-grid-map}
+plot_surface(no_merge_surface, "Grid surface: no merge required")
+```
+
+The cell counts are identical to the source counts because each source polygon
+is represented by exactly one grid cell.
+
+```{r no-merge-check}
+count_check(no_merge, no_merge_grid)
+
+no_merge_surface |>
+  st_drop_geometry() |>
+  select(cell, source_id, A, B)
+```
+
+# Case 2: Merge Required
+
+Now create two tiny populated polygons along the left edge. With a four-by-two
+grid, no grid-cell centroid falls inside either tiny polygon. The first-pass
+rasterization therefore misses them.
+
+The fallback step finds a representative interior point for each missed polygon
+and identifies the grid cell containing that point. Because those cells are
+already represented by source polygon 3, the tiny polygons are merged into
+source polygon 3. The merged counts are then distributed over all grid cells
+assigned to source polygon 3.
+
+```{r merge-data}
+merge_case <- st_sf(
+  A = c(10, 0, 20, 0),
+  B = c(0, 6, 4, 30),
+  geometry = st_sfc(
+    make_rect(0, 0, 0.2, 1),
+    make_rect(0, 1, 0.2, 2),
+    make_rect(0.2, 0, 2, 2),
+    make_rect(2, 0, 4, 2)
+  )
+) |>
+  source_to_sf()
+
+merge_grid <- surface_from_polygons(merge_case, nrow = 2, ncol = 4)
+merge_surface <- surface_to_sf(merge_grid)
+```
+
+```{r merge-source-map}
+plot_sources(merge_case, "Source polygons: merge required")
+```
+
+```{r merge-grid-map}
+plot_surface(merge_surface, "Grid surface after fallback merges")
+```
+
+The fallback metadata reports which source polygons were missed by the initial
+centroid assignment and which fallback cells they used. In this example, source
+polygons 1 and 2 are merged into the represented source polygon occupying those
+fallback cells.
+
+```{r merge-fallback}
+tibble(
+  missing_source_id = merge_grid$fallback$ids,
+  fallback_cell = merge_grid$fallback$cells
+)
+```
+
+The overall group counts are still preserved.
+
+```{r merge-count-check}
+count_check(merge_case, merge_grid)
+```
+
+But the source-to-grid bookkeeping changes. Source polygons 1 and 2 are not
+represented as their own grid zones. Their counts are included in source zone 3,
+and then spread over the four cells assigned to source zone 3.
+
+```{r merge-zone-check}
+source_totals <- merge_case |>
+  st_drop_geometry() |>
+  select(source_id, A, B)
+
+surface_totals <- merge_surface |>
+  st_drop_geometry() |>
+  group_by(source_id) |>
+  summarise(A = sum(A), B = sum(B), .groups = "drop")
+
+source_totals
+surface_totals
+```
+
+# Pycnophylactic Smoothing Uses the Merged Grid
+
+For `surface = "pycno"`, the same grid construction happens first. The
+pycnophylactic smoother then operates on the merged grid and preserves the
+counts of the represented grid zones. This keeps the smoother coherent: it does
+not receive unrepresented source polygons after the fact.
+
+```{r pycno-merge}
+merge_pycno <- surface_from_polygons(
+  merge_case,
+  nrow = 2,
+  ncol = 4,
+  surface = "pycno"
+)
+merge_pycno_surface <- surface_to_sf(merge_pycno)
+```
+
+```{r pycno-map}
+plot_surface(merge_pycno_surface, "Pycnophylactic surface after fallback merges")
+```
+
+The total counts remain unchanged after smoothing.
+
+```{r pycno-count-check}
+count_check(merge_case, merge_pycno)
+```
+
+# Using the Surface in spseg()
+
+In ordinary use, call `spseg()` directly. The same surface construction is used
+internally before local environments and segregation indices are calculated.
+
+```{r spseg-surface-call}
+grid_result <- spseg(
+  merge_case[, c("A", "B")],
+  surface = "grid",
+  nrow = 2,
+  ncol = 4,
+  bands = c(1, 2),
+  output = "full"
+)
+
+pycno_result <- spseg(
+  merge_case[, c("A", "B")],
+  surface = "pycno",
+  nrow = 2,
+  ncol = 4,
+  bands = c(1, 2),
+  output = "full",
+  converge = 1
+)
+
+as.data.frame(grid_result, what = "indices")
+as.data.frame(pycno_result, what = "indices")
+```
+

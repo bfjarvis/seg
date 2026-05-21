@@ -173,7 +173,7 @@ local_maps <- st_as_sf(providence_seg, shape = "long") |>
 
 ```{r local-share-map}
 ggplot(local_maps) +
-  geom_sf(aes(fill = Hispanic_Share), color = NA) +
+  geom_sf(aes(fill = Hispanic_Share),size=0.1) +
   facet_wrap(~ band,nrow=2) +
   scale_fill_viridis_c(labels = function(x) paste0(round(100 * x), "%"),na.value = 'gray70') +
   labs(fill = "Hispanic share") +
