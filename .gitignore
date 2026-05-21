@@ -8,3 +8,6 @@ src/*.so
 src/*.dll
 .positai
 figure
+.vscode/extensions.json
+.vscode/settings.json
+air.toml

@@ -27,8 +27,12 @@ spseg_surface <- function(x, coords, data, surface, args, verbose) {
     return(list(coords = coords, data = data, geometry = NULL))
   }
   if (!inherits(x, "sf")) {
-    stop("surface = \"", surface, "\" requires 'x' to be an sf object",
-         call. = FALSE)
+    stop(
+      "surface = \"",
+      surface,
+      "\" requires 'x' to be an sf object",
+      call. = FALSE
+    )
   }
   if (surface == "grid") {
     return(spseg_surface_grid(x, data, args, verbose))
@@ -363,15 +367,19 @@ surface_compact_grid <- function(grid, crs, geometry_type) {
 #' @return Invisibly returns `NULL`; called for its warning side effect.
 #'
 #' @noRd
-surface_warn_unrepresented_zones <- function(zone_ids, data,
-                                             fallback_ids = integer()) {
+surface_warn_unrepresented_zones <- function(
+  zone_ids,
+  data,
+  fallback_ids = integer()
+) {
   represented <- unique(c(zone_ids[!is.na(zone_ids)], fallback_ids))
   positive <- which(rowSums(data) > 0)
   missing <- setdiff(positive, represented)
   if (length(missing) > 0) {
     warning(
       "surface construction did not create grid cells for ",
-      length(missing), " non-empty source polygon(s). ",
+      length(missing),
+      " non-empty source polygon(s). ",
       "The grid is too coarse to preserve the input population surface; ",
       "use a smaller 'cellsize'/'celldim'.",
       call. = FALSE
@@ -393,8 +401,10 @@ surface_geometry_type <- function(args) {
   geometry <- args$surface_geometry %||% args$keep_geometry %||% FALSE
   if (is.logical(geometry)) {
     if (length(geometry) != 1 || is.na(geometry)) {
-      stop("'surface_geometry' must be TRUE, FALSE, or a geometry type",
-           call. = FALSE)
+      stop(
+        "'surface_geometry' must be TRUE, FALSE, or a geometry type",
+        call. = FALSE
+      )
     }
     return(if (geometry) "polygons" else "none")
   }
