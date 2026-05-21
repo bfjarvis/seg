@@ -155,6 +155,37 @@ surface_grid <- function(x, data, args) {
   )
 }
 
+#' Determine grid dimensions for a surface
+#'
+#' Uses explicit `nrow` and `ncol` values when supplied. Otherwise, derives grid
+#' dimensions from `celldim`/`cellsize` and the input bounding box.
+#'
+#' @param x Polygonal `sf` object.
+#' @param args Named list of surface options.
+#'
+#' @return A list with integer `nrow` and `ncol` entries.
+#'
+#' @noRd
+surface_grid_dims <- function(x, args) {
+  if (!is.null(args$nrow) && !is.null(args$ncol)) {
+    return(list(nrow = args$nrow, ncol = args$ncol))
+  }
+  
+  bbox <- st_bbox(x)
+  celldim <- args$celldim %||% args$cellsize
+  if (is.null(celldim)) {
+    celldim <- min(bbox$xmax - bbox$xmin, bbox$ymax - bbox$ymin) / 100
+  }
+  if (!is.numeric(celldim) || length(celldim) != 1 || celldim <= 0) {
+    stop("'celldim' must be a positive numeric scalar", call. = FALSE)
+  }
+  
+  list(
+    nrow = max(1, ceiling((bbox$ymax - bbox$ymin) / celldim)),
+    ncol = max(1, ceiling((bbox$xmax - bbox$xmin) / celldim))
+  )
+}
+
 #' Create a terra raster template for a surface grid
 #'
 #' @param x Polygonal `sf` object.
@@ -460,33 +491,4 @@ surface_make_geometry <- function(coords, crs, type, width, height = width) {
   st_sfc(cells, crs = crs)
 }
 
-#' Determine grid dimensions for a surface
-#'
-#' Uses explicit `nrow` and `ncol` values when supplied. Otherwise, derives grid
-#' dimensions from `celldim`/`cellsize` and the input bounding box.
-#'
-#' @param x Polygonal `sf` object.
-#' @param args Named list of surface options.
-#'
-#' @return A list with integer `nrow` and `ncol` entries.
-#'
-#' @noRd
-surface_grid_dims <- function(x, args) {
-  if (!is.null(args$nrow) && !is.null(args$ncol)) {
-    return(list(nrow = args$nrow, ncol = args$ncol))
-  }
 
-  bbox <- st_bbox(x)
-  celldim <- args$celldim %||% args$cellsize
-  if (is.null(celldim)) {
-    celldim <- min(bbox$xmax - bbox$xmin, bbox$ymax - bbox$ymin) / 100
-  }
-  if (!is.numeric(celldim) || length(celldim) != 1 || celldim <= 0) {
-    stop("'celldim' must be a positive numeric scalar", call. = FALSE)
-  }
-
-  list(
-    nrow = max(1, ceiling((bbox$ymax - bbox$ymin) / celldim)),
-    ncol = max(1, ceiling((bbox$xmax - bbox$xmin) / celldim))
-  )
-}
