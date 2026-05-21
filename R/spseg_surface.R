@@ -129,7 +129,8 @@ spseg_surface_pycno <- function(x, data, args, verbose) {
 #'
 #' @noRd
 surface_grid <- function(x, data, args) {
-  template <- surface_raster_template(x, surface_grid_dims(x, args))
+  grid_dims <- surface_grid_dims(x, args)
+  template <- surface_raster_template(x, grid_dims)
   zone_ids <- surface_rasterize_zones(x, template)
   fallback <- surface_fallback_counts(zone_ids, x, data, template)
   merged <- surface_merge_fallback_counts(zone_ids, data, fallback)
@@ -425,45 +426,14 @@ surface_make_geometry <- function(coords, crs, type, width, height = width) {
   if (identical(type, "none")) {
     return(NULL)
   }
+  if (nrow(coords) == 0) {
+    return(st_sfc(crs = crs))
+  }
+
   if (identical(type, "points")) {
-    return(surface_point_geometry(coords, crs))
-  }
-
-  surface_polygon_geometry(coords, crs, width, height)
-}
-
-#' Make point geometry from grid-cell centers
-#'
-#' @param coords Numeric matrix of grid-cell center coordinates.
-#' @param crs Coordinate reference system for the returned geometry.
-#'
-#' @return An `sfc_POINT` vector.
-#'
-#' @noRd
-surface_point_geometry <- function(coords, crs) {
-  if (nrow(coords) == 0) {
-    return(st_sfc(crs = crs))
-  }
-
-  st_as_sfc(
-    paste0("POINT (", coords[, 1], " ", coords[, 2], ")"),
-    crs = crs
-  )
-}
-
-#' Make square polygon geometry around grid-cell centers
-#'
-#' @param coords Numeric matrix of grid-cell center coordinates.
-#' @param crs Coordinate reference system for the returned geometry.
-#' @param width Numeric grid-cell width.
-#' @param height Numeric grid-cell height.
-#'
-#' @return An `sfc_POLYGON` vector.
-#'
-#' @noRd
-surface_polygon_geometry <- function(coords, crs, width, height = width) {
-  if (nrow(coords) == 0) {
-    return(st_sfc(crs = crs))
+    points <- as.data.frame(coords)
+    names(points) <- c("x", "y")
+    return(st_geometry(st_as_sf(points, coords = c("x", "y"), crs = crs)))
   }
 
   cells <- lapply(seq_len(nrow(coords)), function(i) {
@@ -496,34 +466,17 @@ surface_grid_dims <- function(x, args) {
     return(list(nrow = args$nrow, ncol = args$ncol))
   }
 
-  celldim <- surface_celldim(x, args)
   bbox <- st_bbox(x)
+  celldim <- args$celldim %||% args$cellsize
+  if (is.null(celldim)) {
+    celldim <- min(bbox$xmax - bbox$xmin, bbox$ymax - bbox$ymin) / 100
+  }
+  if (!is.numeric(celldim) || length(celldim) != 1 || celldim <= 0) {
+    stop("'celldim' must be a positive numeric scalar", call. = FALSE)
+  }
+
   list(
     nrow = max(1, ceiling((bbox$ymax - bbox$ymin) / celldim)),
     ncol = max(1, ceiling((bbox$xmax - bbox$xmin) / celldim))
   )
-}
-
-#' Resolve the grid-cell dimension
-#'
-#' Uses `celldim` or `cellsize` when provided; otherwise defaults to one
-#' hundredth of the shorter side of the input bounding box.
-#'
-#' @param x Polygonal `sf` object.
-#' @param args Named list of surface options.
-#'
-#' @return Positive numeric grid-cell side length.
-#'
-#' @noRd
-surface_celldim <- function(x, args) {
-  celldim <- args$celldim %||% args$cellsize
-  if (!is.null(celldim)) {
-    if (!is.numeric(celldim) || length(celldim) != 1 || celldim <= 0) {
-      stop("'celldim' must be a positive numeric scalar", call. = FALSE)
-    }
-    return(celldim)
-  }
-
-  bbox <- st_bbox(x)
-  min(bbox$xmax - bbox$xmin, bbox$ymax - bbox$ymin) / 100
 }
