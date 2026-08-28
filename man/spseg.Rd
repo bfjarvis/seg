@@ -15,6 +15,7 @@ spseg(
   neighbors = c("radius", "knn"),
   search = c("kdtree", "brute"),
   surface = c("raw", "grid", "pycno"),
+  surface_audit = FALSE,
   scope = c("both", "multigroup", "pairwise"),
   output = c("indices", "full", "localenv"),
   verbose = FALSE,
@@ -62,6 +63,13 @@ redistributes areal counts over a square grid. "pycno" applies
 groupwise pycnophylactic smoothing on that grid while preserving source
 polygon group totals.}
 
+\item{surface_audit}{Logical. If `TRUE`, retain auditable surface
+intermediates in `result$surface_info$audit`, including source counts and
+geometry, source-zone assignments for retained grid cells, fallback
+contributions, the initial gridded counts, and pycnophylactically smoothed
+counts when applicable. The default retains only lightweight grid and
+fallback metadata.}
+
 \item{scope}{Whether to calculate "multigroup" measures, "pairwise"
 two-group measures, or "both".}
 
@@ -85,7 +93,7 @@ surfaces store only centroid coordinates and population counts.}
 \value{
 An S3 object of class `seg_result`. It is a list with fields
   including `bands`, `indices`, `env`, `coords`, `data`,
-  `geometry`, `neighbors`, and `crs`. Some fields are
+  `geometry`, `neighbors`, `surface_info`, and `crs`. Some fields are
   `NULL` depending on `output`.
 }
 \description{

@@ -75,6 +75,12 @@
 #'   redistributes areal counts over a square grid. "pycno" applies
 #'   groupwise pycnophylactic smoothing on that grid while preserving source
 #'   polygon group totals.
+#' @param surface_audit Logical. If `TRUE`, retain auditable surface
+#'   intermediates in `result$surface_info$audit`, including source counts and
+#'   geometry, source-zone assignments for retained grid cells, fallback
+#'   contributions, the initial gridded counts, and pycnophylactically smoothed
+#'   counts when applicable. The default retains only lightweight grid and
+#'   fallback metadata.
 #' @param scope Whether to calculate "multigroup" measures, "pairwise"
 #'   two-group measures, or "both".
 #' @param output Return mode. "indices" stores only segregation indices.
@@ -94,7 +100,7 @@
 #'
 #' @return An S3 object of class `seg_result`. It is a list with fields
 #'   including `bands`, `indices`, `env`, `coords`, `data`,
-#'   `geometry`, `neighbors`, and `crs`. Some fields are
+#'   `geometry`, `neighbors`, `surface_info`, and `crs`. Some fields are
 #'   `NULL` depending on `output`.
 #'
 #' @note
@@ -153,6 +159,7 @@ spseg <- function(
   neighbors = c("radius", "knn"),
   search = c("kdtree", "brute"),
   surface = c("raw", "grid", "pycno"),
+  surface_audit = FALSE,
   scope = c("both", "multigroup", "pairwise"),
   output = c("indices", "full", "localenv"),
   verbose = FALSE,
@@ -164,6 +171,7 @@ spseg <- function(
   neighbors <- match.arg(neighbors)
   search <- match.arg(search)
   surface <- match.arg(surface)
+  surface_audit <- isTRUE(surface_audit)
   dots <- list(...)
   weighting <- if (missing(weighting)) "biweight" else match.arg(weighting)
   normalize <- isTRUE(normalize)
@@ -203,6 +211,7 @@ spseg <- function(
     data = checked$data,
     surface = surface,
     args = dots,
+    audit = surface_audit,
     verbose = verbose
   )
   pop_surface$coords <- as.matrix(pop_surface$coords)
@@ -261,7 +270,8 @@ spseg <- function(
     },
     neighbors = neighbors,
     search = search,
-    surface = surface
+    surface = surface,
+    surface_info = pop_surface$surface_info
   )
   result
 }
