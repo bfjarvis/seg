@@ -91,18 +91,18 @@ ggplot(auck) +
 ```{r first-run}
 auck_poly_seg <- spseg(
   auck[, c("Korean", "Non_Korean")],
-  bands=c(1,2000,5000),
-  search="kdtree",
-  neighbors="radius",
-  measures="all",
-  output="full"
+  bands = c(1, 2000, 5000),
+  search = "kdtree",
+  neighbors = "radius",
+  measures = "all",
+  output = "full"
 )
 ```
 
 And we can view the indices in  a `data.frame`
 
 ```{r}
-(auck_poly_ind<-as.data.frame(auck_poly_seg,what="indices"))
+(auck_poly_ind <- as.data.frame(auck_poly_seg, what = "indices"))
 ```
 
 
@@ -111,16 +111,23 @@ And we can view the indices in  a `data.frame`
 `as.data.frame()` methods are available. Specifying `what='env'` and `shape='long'` returns the local environments in a tidy data.frame. 
 
 ```{r localenv-map}
-auck_poly_env<-as.data.frame(auck_poly_seg,what="env",shape="long") 
-auck_poly_env$Total<-with(auck_poly_env, Korean+Non_Korean)
-auck_poly_env$Korean_Share <- with(auck_poly_env,Korean/Total)
+auck_poly_env <- as.data.frame(auck_poly_seg, what = "env", shape = "long")
+auck_poly_env$Total <- with(auck_poly_env, Korean + Non_Korean)
+auck_poly_env$Korean_Share <- with(auck_poly_env, Korean / Total)
 
-ggplot(auck_poly_env) + 
-  geom_sf(aes(geometry=geometry,fill = Korean_Share+0.001), color = NA) +
-  scale_fill_viridis_c(labels = function(x) paste0(round(100 * x, 1), "%"), transform='log10') +
-  facet_wrap(vars(band),ncol=3,
-             labeller=as_labeller(
-               function(x) paste('Bandwidth =',x,'m'))) +
+ggplot(auck_poly_env) +
+  geom_sf(aes(geometry = geometry, fill = Korean_Share + 0.001), color = NA) +
+  scale_fill_viridis_c(
+    labels = function(x) paste0(round(100 * x, 1), "%"),
+    transform = 'log10'
+  ) +
+  facet_wrap(
+    vars(band),
+    ncol = 3,
+    labeller = as_labeller(
+      function(x) paste('Bandwidth =', x, 'm')
+    )
+  ) +
   labs(fill = "Spatially\nWeighted\nKorean share\n(log scale)") +
   theme_void()
 ```
@@ -143,11 +150,11 @@ auck_grid_seg <- spseg(
 The same `spseg()` call also produces segregation indices and local environments from the grid-based population surface.
 
 ```{r grid-surface-indices}
-(auck_grid_ind<-as.data.frame(auck_grid_seg, what = "indices"))
+(auck_grid_ind <- as.data.frame(auck_grid_seg, what = "indices"))
 
-auck_grid_env<-as.data.frame(auck_grid_seg,what="env",shape="long") 
-auck_grid_env$Total<-with(auck_grid_env, Korean+Non_Korean)
-auck_grid_env$Korean_Share <- with(auck_grid_env,Korean/Total)
+auck_grid_env <- as.data.frame(auck_grid_seg, what = "env", shape = "long")
+auck_grid_env$Total <- with(auck_grid_env, Korean + Non_Korean)
+auck_grid_env$Korean_Share <- with(auck_grid_env, Korean / Total)
 ```
 
 The `surface="pycno"` option also constructs a grid, then applies groupwise pycnophylactic interpolation. Each group is smoothed separately, then rescaled within each area unit after every iteration so the known group totals are preserved.
@@ -158,7 +165,7 @@ auck_pycno_seg <- spseg(
   surface = "pycno",
   surface_geometry = 'polygons',
   celldim = 200,
-  bands = c(1,2000, 5000),
+  bands = c(1, 2000, 5000),
   output = "full"
 )
 ```
@@ -166,51 +173,55 @@ auck_pycno_seg <- spseg(
 The segregation indices and local environments can be extracted in the same way.
 
 ```{r pycno-surface-indices}
-(auck_pycno_ind<-as.data.frame(auck_pycno_seg, what = "indices"))
+(auck_pycno_ind <- as.data.frame(auck_pycno_seg, what = "indices"))
 
-auck_pycno_env<-as.data.frame(auck_pycno_seg,what="env",shape="long") 
-auck_pycno_env$Total<-with(auck_pycno_env, Korean+Non_Korean)
-auck_pycno_env$Korean_Share <- with(auck_pycno_env,Korean/Total)
+auck_pycno_env <- as.data.frame(auck_pycno_seg, what = "env", shape = "long")
+auck_pycno_env$Total <- with(auck_pycno_env, Korean + Non_Korean)
+auck_pycno_env$Korean_Share <- with(auck_pycno_env, Korean / Total)
 ```
 
 We can view all of the local environments based on the two approaches
 
 ```{r pycno-surface-localenv}
-auck_poly_env$surface<-'polygon'
-auck_grid_env$surface<-'grid'
-auck_pycno_env$surface<-'pycnophylactic'
-auck_env <- rbind(auck_poly_env,auck_grid_env,auck_pycno_env)
+auck_poly_env$surface <- 'polygon'
+auck_grid_env$surface <- 'grid'
+auck_pycno_env$surface <- 'pycnophylactic'
+auck_env <- rbind(auck_poly_env, auck_grid_env, auck_pycno_env)
 
 auck_env$Total <- with(auck_env, Korean + Non_Korean)
 auck_env$Korean_Share <- with(auck_env, Korean / Total)
 
-auck_env[auck_env$surface!='polygon',] |> 
-ggplot(aes(geometry = geometry, 
-              fill = Korean_Share+0.001,
-              alpha=log(Total+1))) +
-  geom_sf(color=NA,linewidth=0) +
+auck_env[auck_env$surface != 'polygon', ] |>
+  ggplot(aes(
+    geometry = geometry,
+    fill = Korean_Share + 0.001,
+    alpha = log(Total + 1)
+  )) +
+  geom_sf(color = NA, linewidth = 0) +
   scale_fill_viridis_c(
     labels = function(x) paste0(round(100 * x, 1), "%"),
-    na.value = "grey90",transform="log"
+    na.value = "grey90",
+    transform = "log"
   ) +
-  facet_grid(rows=vars(surface),cols=vars(band),switch="y") +
+  facet_grid(rows = vars(surface), cols = vars(band), switch = "y") +
   labs(fill = "local share") +
-  theme_void()+
-  guides(color='none',alpha='none')
+  theme_void() +
+  guides(color = 'none', alpha = 'none')
 ```
 
 And we can plot the segregation indices across bandwidths for all three approaches
 
 ```{r}
-auck_poly_ind$surface<-'polygon'
-auck_grid_ind$surface<-'grid'
-auck_pycno_ind$surface<-'pycnophylactic'
-auck_ind<-rbind(auck_poly_ind,auck_grid_ind,auck_pycno_ind)
+auck_poly_ind$surface <- 'polygon'
+auck_grid_ind$surface <- 'grid'
+auck_pycno_ind$surface <- 'pycnophylactic'
+auck_ind <- rbind(auck_poly_ind, auck_grid_ind, auck_pycno_ind)
 
-ggplot(auck_ind, aes(x=band,y=value,color=surface)) +
-  geom_line() + theme_minimal() + facet_wrap(~measure,nrow=1) +
+ggplot(auck_ind, aes(x = band, y = value, color = surface)) +
+  geom_line() +
+  theme_minimal() +
+  facet_wrap(~measure, nrow = 1) +
   theme(aspect.ratio = 1)
-
 ```
 
 # Bandwidth Sensitivity
@@ -219,16 +230,16 @@ Spatial segregation measures can change with the geographic scale used to
 construct local environments. When we calculated the segregation measures, we already specified only three bandwidths. We could use more bandwidths, here just using the original polygons. 
 
 ```{r}
-powers<-3:5
-incr<-seq(0.2,1,by=0.1)
-bws<-c(1, 1000, 1500, seq(2000,20000,by=1000))
+powers <- 3:5
+incr <- seq(0.2, 1, by = 0.1)
+bws <- c(1, 1000, 1500, seq(2000, 20000, by = 1000))
 
 auck_seg_bw <- spseg(
   auck[, c("Korean", "Non_Korean")],
-  bands=bws,
-  surface='raw',
-  weighting='biweight',
-  power=3,
+  bands = bws,
+  surface = 'raw',
+  weighting = 'biweight',
+  power = 3,
   search = "kdtree",
   neighbors = "radius",
   measures = "all",
@@ -239,19 +250,22 @@ auck_seg_bw <- spseg(
 We can extract the corresponding segregation measures using `as.data.frame()` with `what='indices'`. If we want the data in a tidy long format data frame, we can further specify `shape='long'`.
 
 ```{r bandwidth-sequence}
-head(auck_ind_bw<-as.data.frame(auck_seg_bw ,what="indices",shape="long"))
+head(
+  auck_ind_bw <- as.data.frame(auck_seg_bw, what = "indices", shape = "long")
+)
 ```
 
 Then we can plot the resulting segregation curves:
 
 ```{r bandwidth-curve-biweight}
-auck_ind_bw |> 
-ggplot(aes(x = band, y = value)) +
+auck_ind_bw |>
+  ggplot(aes(x = band, y = value)) +
   geom_line() +
   geom_point(size = 1.5) +
-  facet_wrap(~ measure, scales = "free_y") +
+  facet_wrap(~measure, scales = "free_y") +
   labs(x = "Bandwidth (m)", y = "Measure value") +
-  theme_minimal() + theme(aspect.ratio = 1)
+  theme_minimal() +
+  theme(aspect.ratio = 1)
 ```
 
 The default uses biweights. We can also try the unweighted approach:
@@ -260,7 +274,7 @@ The default uses biweights. We can also try the unweighted approach:
 spseg(
   auck[, c("Korean", "Non_Korean")],
   bands = bws,
-  weighting='unweighted',
+  weighting = 'unweighted',
   neighbors = "radius",
   measures = "all",
   output = "full"
@@ -269,26 +283,35 @@ spseg(
   ggplot(aes(x = band, y = value)) +
   geom_line() +
   geom_point(size = 1.5) +
-  facet_wrap( ~ measure, scales = "free_y") +
+  facet_wrap(~measure, scales = "free_y") +
   labs(x = "Bandwidth (m)", y = "Measure value") +
-  theme_minimal() + theme(aspect.ratio = 1)
+  theme_minimal() +
+  theme(aspect.ratio = 1)
 ```
 
 
 The exposure/isolation values are a bit more complicated, but can be returned in long form using the `what='exposure'` option in `as.data.frame()`.
 
 ```{r exposure-curve}
-head(auck_poly_exp<-as.data.frame(auck_seg_bw, what = "exposure") )
+head(auck_poly_exp <- as.data.frame(auck_seg_bw, what = "exposure"))
 
-auck_poly_exp |> 
-ggplot(aes(x = band, y = exposure,color=from_group)) +
+auck_poly_exp |>
+  ggplot(aes(x = band, y = exposure, color = from_group)) +
   geom_line() +
   geom_point(size = 1.5) +
-  scale_y_continuous(labels=function(x) { format(100*x,digits=2) }) +
-  facet_wrap(~ to_group, scales = "free_y",
-             labeller=as_labeller(
-               function(x) { paste("%",x) })) +
-  labs(x = "Bandwidth (m)", y = "%",color='focal group') +
+  scale_y_continuous(labels = function(x) {
+    format(100 * x, digits = 2)
+  }) +
+  facet_wrap(
+    ~to_group,
+    scales = "free_y",
+    labeller = as_labeller(
+      function(x) {
+        paste("%", x)
+      }
+    )
+  ) +
+  labs(x = "Bandwidth (m)", y = "%", color = 'focal group') +
   theme_minimal()
 ```
 

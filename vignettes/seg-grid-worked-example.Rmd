@@ -96,27 +96,24 @@ grid |>
 The examples below calculate two multigroup indices. With two groups, these
 are also equal to their pairwise versions.
 
-For each focal cell `i`, let `t_i` be the observed population count in the cell.
-Let `p_iA` and `p_iB` be the local environment proportions for the two groups.
-Let `P_A` and `P_B` be the regional proportions. In this example, every cell has
-10 people and the region is exactly balanced, so `P_A = P_B = 0.5`.
+For each focal cell $i$, let $t_i$ be the observed population count in the cell.
+Let $p_{im}$ be the local environment proportions for group $m$.
+Let $P_m$ be the regional proportion for group $m$. In this example with groups $A$ and $B$, every cell has
+10 people and the region is exactly balanced, so $P_A = P_B = 0.5$.
 
 The information theory index is
 
-\[
-H = 1 - \frac{\sum_i t_i E_i}{T E},
-\]
+$$H = 1 - \frac{1}{T E}\sum_i t_i E_i,$$
 
-where `E_i` is the entropy of the local environment and `E` is the regional
+where $E_i$ is the entropy of the local environment and $E$ is the regional
 entropy.
 
 The dissimilarity index is
 
-\[
-D = \frac{\sum_i t_i \sum_m |p_{im} - P_m|}{2 T I},
-\]
 
-where `I = sum_m P_m(1 - P_m)`.
+$$D = \frac{1}{2 T I}\sum_i t_i \sum_m |p_{im} - P_m|,$$
+
+where $I = \sum_m P_m(1 - P_m)$.
 
 The small helper below is intentionally written with ordinary `dplyr`
 operations. It returns both the cell-level calculations and the final indices.
@@ -150,9 +147,7 @@ calculate_indices <- function(local_env, label) {
       p_B = B / local_total,
       E_i = -(xlogx(p_A) + xlogx(p_B)) / log(2),
       H_contrib = t_i * E_i,
-      D_contrib = t_i * (
-        abs(p_A - regional$P_A) + abs(p_B - regional$P_B)
-      )
+      D_contrib = t_i * (abs(p_A - regional$P_A) + abs(p_B - regional$P_B))
     )
 
   indices <- unit_calculations |>
@@ -345,8 +340,10 @@ index_labels <- bind_rows(manual_indices, spseg_indices) |>
   mutate(
     facet_label = paste0(
       source,
-      "\nH=", sprintf("%.3f", information),
-      "\nD=", sprintf("%.3f", dissimilarity)
+      "\nH=",
+      sprintf("%.3f", information),
+      "\nD=",
+      sprintf("%.3f", dissimilarity)
     )
   ) |>
   select(scenario, source, facet_label)
@@ -382,8 +379,10 @@ local_env_plot_data <- function(manual_env, spseg_result, scenario) {
       ),
       A_share = A / (A + B),
       label = paste0(
-        "A=", round(A, 2),
-        "\nB=", round(B, 2)
+        "A=",
+        round(A, 2),
+        "\nB=",
+        round(B, 2)
       )
     )
 }
@@ -399,7 +398,7 @@ plot_local_env_comparison <- function(plot_data) {
       vjust = 1
     ) +
     geom_text(aes(label = label), size = 3.2) +
-    facet_wrap(~ facet_label) +
+    facet_wrap(~facet_label) +
     coord_equal() +
     composition_scale("Local A share") +
     theme_minimal()
@@ -417,9 +416,13 @@ plot_local_env_comparison(unweighted_plot_data)
 
 tibble(
   local_environments_equal = isTRUE(all.equal(
-    unweighted_plot_data |> filter(source == "dplyr") |> arrange(id) |>
+    unweighted_plot_data |>
+      filter(source == "dplyr") |>
+      arrange(id) |>
       select(A, B),
-    unweighted_plot_data |> filter(source == "spseg") |> arrange(id) |>
+    unweighted_plot_data |>
+      filter(source == "spseg") |>
+      arrange(id) |>
       select(A, B),
     tolerance = 1e-12
   ))
@@ -437,9 +440,13 @@ plot_local_env_comparison(weighted_plot_data)
 
 tibble(
   local_environments_equal = isTRUE(all.equal(
-    weighted_plot_data |> filter(source == "dplyr") |> arrange(id) |>
+    weighted_plot_data |>
+      filter(source == "dplyr") |>
+      arrange(id) |>
       select(A, B),
-    weighted_plot_data |> filter(source == "spseg") |> arrange(id) |>
+    weighted_plot_data |>
+      filter(source == "spseg") |>
+      arrange(id) |>
       select(A, B),
     tolerance = 1e-12
   ))
