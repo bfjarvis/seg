@@ -53,8 +53,9 @@ S3 result objects returned by [spseg()].
 \details{
 A `seg_result` is a plain S3 list. The most commonly used fields are:
 `bands`, `indices`, `env`, `coords`, `data`, `geometry`, `neighbors`,
-and `crs`. When `spseg(output = "indices")`, local environments and input
-data are not stored. When `spseg(output = "localenv")`, indices are not
+`surface_info`, and `crs`. When `spseg(output = "indices")`, local
+environments and input data are not stored. Surface audit information is
+retained when requested. When `spseg(output = "localenv")`, indices are not
 calculated.
 }
 \seealso{

@@ -51,6 +51,32 @@ make_rect <- function(xmin, ymin, xmax, ymax) {
   )))
 }
 
+make_irregular_case <- function(edge_width) {
+  st_sf(
+    A = c(12, 0, 60, 15),
+    B = c(0, 8, 30, 75),
+    geometry = st_sfc(
+      make_rect(0, 0, edge_width, 1),
+      make_rect(0, 5, edge_width, 6),
+      st_polygon(list(rbind(
+        c(edge_width, 0),
+        c(3, 0),
+        c(4, 6),
+        c(edge_width, 6),
+        c(edge_width, 5),
+        c(0, 5),
+        c(0, 1),
+        c(edge_width, 1),
+        c(edge_width, 0)
+      ))),
+      st_polygon(list(rbind(
+        c(3, 0), c(6, 0), c(6, 6), c(4, 6), c(3, 0)
+      )))
+    )
+  ) |>
+    source_to_sf()
+}
+
 surface_from_polygons <- function(x, nrow, ncol, surface = "grid") {
   checked <- suppressMessages(seg:::chksegdata(x[, c("A", "B")]))
   seg:::spseg_surface(
@@ -75,7 +101,11 @@ surface_to_sf <- function(surface) {
     as.data.frame(surface$data),
     geometry = surface$geometry
   ) |>
-    mutate(total = A + B, A_share = A / total)
+    mutate(
+      fallback_cell = cell %in% surface$fallback$cells,
+      total = A + B,
+      A_share = A / total
+    )
 }
 
 source_to_sf <- function(x) {
@@ -104,23 +134,58 @@ plot_sources <- function(x, title) {
     theme_minimal()
 }
 
-plot_surface <- function(x, title) {
+plot_surface <- function(x, title, labels = c("all", "fallback")) {
+  labels <- match.arg(labels)
   centroids <- st_point_on_surface(st_geometry(x))
-  labels <- cbind(st_drop_geometry(x), st_coordinates(centroids))
+  label_data <- cbind(st_drop_geometry(x), st_coordinates(centroids)) |>
+    mutate(
+      label = if (labels == "all") {
+        paste0("cell ", cell, "\nsource ", source_id,
+               "\nA=", round(A, 1), "\nB=", round(B, 1))
+      } else if_else(
+        fallback_cell,
+        paste0("cell ", cell, "\nA=", round(A, 1), "\nB=", round(B, 1)),
+        as.character(cell)
+      )
+    )
 
   ggplot(x) +
     geom_sf(aes(fill = A_share), color = "white", linewidth = 0.8) +
+    geom_sf(
+      data = filter(x, fallback_cell),
+      fill = NA,
+      color = "#333333",
+      linewidth = 1.4
+    ) +
     geom_text(
-      data = labels,
-      aes(
-        X, Y,
-        label = paste0("cell ", cell, "\nsource ", source_id,
-                       "\nA=", round(A, 1), "\nB=", round(B, 1))
-      ),
-      size = 2.8
+      data = label_data,
+      aes(X, Y, label = label),
+      size = if (labels == "all") 2.8 else 2.5
     ) +
     coord_sf(expand = FALSE) +
     composition_scale("Grid A share") +
+    labs(title = title) +
+    theme_minimal()
+}
+
+plot_surface_change <- function(x, title) {
+  limit <- max(abs(x$A_share_change))
+
+  ggplot(x) +
+    geom_sf(aes(fill = A_share_change), color = "white", linewidth = 0.8) +
+    geom_sf_text(
+      aes(label = paste0(cell, "\n", sprintf("%+.2f", A_share_change))),
+      size = 2.4
+    ) +
+    coord_sf(expand = FALSE) +
+    scale_fill_gradient2(
+      low = "#f4a6a6",
+      mid = "white",
+      high = "#a8c7ff",
+      midpoint = 0,
+      limits = c(-limit, limit),
+      name = "Change in\nA share"
+    ) +
     labs(title = title) +
     theme_minimal()
 }
@@ -135,146 +200,281 @@ count_check <- function(source, surface) {
 }
 ```
 
-# Case 1: No Merge Required
+# Case 1: No Fallback Required
 
-Start with four square polygons and a two-by-two grid. Each polygon contains
-one grid-cell centroid, so the first-pass rasterization assigns every polygon
-to one cell. No fallback merge is needed.
+Start with a six-by-six grid over four irregular neighborhoods. Two larger
+neighborhoods are separated by a slanted boundary. Two smaller neighborhoods
+sit at opposite ends of the left edge. Their width is `0.75`, so each contains
+one of the grid centroids at `x = 0.5`. Every populated neighborhood therefore
+receives at least one cell during first-pass rasterization.
 
 ```{r no-merge-data}
-no_merge <- st_sf(
-  A = c(10, 0, 5, 2),
-  B = c(0, 10, 5, 8),
-  geometry = st_sfc(
-    make_rect(0, 0, 1, 1),
-    make_rect(1, 0, 2, 1),
-    make_rect(0, 1, 1, 2),
-    make_rect(1, 1, 2, 2)
-  )
-) |>
-  source_to_sf()
-
-no_merge_grid <- surface_from_polygons(no_merge, nrow = 2, ncol = 2)
-no_merge_surface <- surface_to_sf(no_merge_grid)
+no_fallback <- make_irregular_case(edge_width = 0.75)
+no_fallback_grid <- surface_from_polygons(
+  no_fallback,
+  nrow = 6,
+  ncol = 6
+)
+no_fallback_surface <- surface_to_sf(no_fallback_grid)
 ```
 
 ```{r no-merge-source-map}
-plot_sources(no_merge, "Source polygons: no merge required")
+plot_sources(no_fallback, "Irregular source polygons: no fallback required")
 ```
 
 ```{r no-merge-grid-map}
-plot_surface(no_merge_surface, "Grid surface: no merge required")
+plot_surface(
+  no_fallback_surface,
+  "Grid surface: all neighborhoods assigned on the first pass",
+  labels = "fallback"
+)
 ```
 
-The cell counts are identical to the source counts because each source polygon
-is represented by exactly one grid cell.
+The larger neighborhoods are represented by multiple cells, so their counts are
+distributed evenly across those cells. Summing the cells by `source_id`
+reproduces every source-neighborhood count, and the fallback metadata is empty.
 
 ```{r no-merge-check}
-count_check(no_merge, no_merge_grid)
+count_check(no_fallback, no_fallback_grid)
 
-no_merge_surface |>
+no_fallback_grid$fallback
+
+no_fallback_surface |>
   st_drop_geometry() |>
-  select(cell, source_id, A, B)
+  group_by(source_id) |>
+  summarise(A = sum(A), B = sum(B), .groups = "drop") |>
+  left_join(
+    no_fallback |>
+      st_drop_geometry() |>
+      select(source_id, A_source = A, B_source = B),
+    by = "source_id"
+  )
 ```
 
-# Case 2: Merge Required
+# Pycnophylactic Smoothing Without Fallback
 
-Now create two tiny populated polygons along the left edge. With a four-by-two
-grid, no grid-cell centroid falls inside either tiny polygon. The first-pass
-rasterization therefore misses them.
+The gridded surface is piecewise constant before smoothing: all cells assigned
+to a given source neighborhood have the same counts. Pycnophylactic smoothing
+uses neighboring cells to soften these abrupt changes, then rescales cells
+within each source zone so that every neighborhood's original group totals are
+restored.
+
+```{r no-fallback-pycno}
+no_fallback_pycno <- surface_from_polygons(
+  no_fallback,
+  nrow = 6,
+  ncol = 6,
+  surface = "pycno"
+)
+no_fallback_pycno_surface <- surface_to_sf(no_fallback_pycno)
+
+no_fallback_change <- no_fallback_pycno_surface |>
+  rename(A_share_pycno = A_share) |>
+  left_join(
+    no_fallback_surface |>
+      st_drop_geometry() |>
+      select(cell, A_share_grid = A_share),
+    by = "cell"
+  ) |>
+  mutate(A_share_change = A_share_pycno - A_share_grid)
+```
+
+```{r no-fallback-pycno-map}
+plot_surface(
+  no_fallback_pycno_surface,
+  "Pycnophylactic surface: no fallback required",
+  labels = "fallback"
+)
+```
+
+```{r no-fallback-change-map}
+plot_surface_change(
+  no_fallback_change,
+  "Where pycnophylactic smoothing changes group A share"
+)
+```
+
+The largest changes occur around the slanted boundary and in the large
+neighborhood near the two small corner neighborhoods. The corner neighborhoods
+are each represented by only one grid cell. Because pycno must preserve their
+zonal totals, those cells remain fixed. Their composition nevertheless affects
+neighboring cells during the averaging step.
+
+```{r no-fallback-pycno-check}
+grid_zone_totals_no_fallback <- no_fallback_surface |>
+  st_drop_geometry() |>
+  group_by(source_id) |>
+  summarise(across(c(A, B), sum), .groups = "drop")
+
+pycno_zone_totals_no_fallback <- no_fallback_pycno_surface |>
+  st_drop_geometry() |>
+  group_by(source_id) |>
+  summarise(across(c(A, B), sum), .groups = "drop")
+
+left_join(
+  grid_zone_totals_no_fallback,
+  pycno_zone_totals_no_fallback,
+  by = "source_id",
+  suffix = c("_grid", "_pycno")
+)
+
+no_fallback_change |>
+  st_drop_geometry() |>
+  filter(source_id %in% c(1, 2) | cell %in% c(2, 7, 25, 32)) |>
+  select(cell, source_id, A_share_grid, A_share_pycno, A_share_change)
+```
+
+# Case 2: Fallback Assignment Required
+
+Keep the same six-by-six grid, group counts, and overall geometric scheme, but
+narrow the two edge neighborhoods from `0.75` to `0.25`. They no longer contain
+the grid centroids at `x = 0.5`, so the first-pass rasterization misses them.
+The two larger neighborhoods retain their irregular shapes and slanted shared
+boundary.
 
 The fallback step finds a representative interior point for each missed polygon
-and identifies the grid cell containing that point. Because those cells are
-already represented by source polygon 3, the tiny polygons are merged into
-source polygon 3. The merged counts are then distributed over all grid cells
-assigned to source polygon 3.
+and identifies the grid cell containing that point. The missing polygon's counts
+are added directly to that cell. They are not spread over the other cells
+assigned to the larger polygon. This retains useful information about where the
+small polygon was located, while still preserving the overall group counts.
 
 ```{r merge-data}
-merge_case <- st_sf(
-  A = c(10, 0, 20, 0),
-  B = c(0, 6, 4, 30),
-  geometry = st_sfc(
-    make_rect(0, 0, 0.2, 1),
-    make_rect(0, 1, 0.2, 2),
-    make_rect(0.2, 0, 2, 2),
-    make_rect(2, 0, 4, 2)
-  )
-) |>
-  source_to_sf()
+fallback_case <- make_irregular_case(edge_width = 0.25)
 
-merge_grid <- surface_from_polygons(merge_case, nrow = 2, ncol = 4)
-merge_surface <- surface_to_sf(merge_grid)
+fallback_grid <- surface_from_polygons(fallback_case, nrow = 6, ncol = 6)
+fallback_surface <- surface_to_sf(fallback_grid)
 ```
 
 ```{r merge-source-map}
-plot_sources(merge_case, "Source polygons: merge required")
+plot_sources(fallback_case, "Irregular source polygons")
 ```
 
 ```{r merge-grid-map}
-plot_surface(merge_surface, "Grid surface after fallback merges")
+plot_surface(
+  fallback_surface,
+  "Grid surface after fallback assignment",
+  labels = "fallback"
+)
 ```
 
 The fallback metadata reports which source polygons were missed by the initial
-centroid assignment and which fallback cells they used. In this example, source
-polygons 1 and 2 are merged into the represented source polygon occupying those
-fallback cells.
+centroid assignment and which fallback cells received their counts. The fallback
+cells are outlined in dark gray in the grid map.
 
 ```{r merge-fallback}
 tibble(
-  missing_source_id = merge_grid$fallback$ids,
-  fallback_cell = merge_grid$fallback$cells
+  missing_source_id = fallback_grid$fallback$ids,
+  fallback_cell = fallback_grid$fallback$cells
 )
 ```
 
 The overall group counts are still preserved.
 
 ```{r merge-count-check}
-count_check(merge_case, merge_grid)
+count_check(fallback_case, fallback_grid)
 ```
 
-But the source-to-grid bookkeeping changes. Source polygons 1 and 2 are not
-represented as their own grid zones. Their counts are included in source zone 3,
-and then spread over the four cells assigned to source zone 3.
+The source-to-grid bookkeeping still changes. Source polygons 1 and 2 are not
+represented as separate grid zones because their fallback cells already belong
+to source zone 3. Their counts therefore contribute to the effective total for
+zone 3. Unlike the merge-and-redistribute approach, however, the counts remain
+concentrated in the two fallback cells. The table contrasts those cells with
+the ordinary cells assigned to zone 3.
 
 ```{r merge-zone-check}
-source_totals <- merge_case |>
+source_totals <- fallback_case |>
   st_drop_geometry() |>
   select(source_id, A, B)
 
-surface_totals <- merge_surface |>
+surface_totals <- fallback_surface |>
   st_drop_geometry() |>
   group_by(source_id) |>
   summarise(A = sum(A), B = sum(B), .groups = "drop")
 
 source_totals
 surface_totals
+
+fallback_surface |>
+  st_drop_geometry() |>
+  filter(source_id == 3) |>
+  group_by(fallback_cell) |>
+  summarise(
+    cells = paste(cell, collapse = ", "),
+    A_min = min(A),
+    A_max = max(A),
+    B_min = min(B),
+    B_max = max(B),
+    .groups = "drop"
+  )
 ```
 
-# Pycnophylactic Smoothing Uses the Merged Grid
+# Pycnophylactic Smoothing Uses the Aggregated Grid
 
 For `surface = "pycno"`, the same grid construction happens first. The
-pycnophylactic smoother then operates on the merged grid and preserves the
-counts of the represented grid zones. This keeps the smoother coherent: it does
-not receive unrepresented source polygons after the fact.
+pycnophylactic smoother then operates on this grid. It no longer needs the
+original polygon geometries, but it does use the effective grid-zone labels to
+rebalance counts after each smoothing iteration. The initial fallback
+concentrations provide a spatially faithful starting surface, while the
+effective zone totals remain fixed. Iterative smoothing can diffuse those
+cell-level concentrations and, with sufficient iteration, may largely remove
+their initial contrast.
 
 ```{r pycno-merge}
-merge_pycno <- surface_from_polygons(
-  merge_case,
-  nrow = 2,
-  ncol = 4,
+fallback_pycno <- surface_from_polygons(
+  fallback_case,
+  nrow = 6,
+  ncol = 6,
   surface = "pycno"
 )
-merge_pycno_surface <- surface_to_sf(merge_pycno)
+fallback_pycno_surface <- surface_to_sf(fallback_pycno)
 ```
 
 ```{r pycno-map}
-plot_surface(merge_pycno_surface, "Pycnophylactic surface after fallback merges")
+plot_surface(
+  fallback_pycno_surface,
+  "Pycnophylactic surface after fallback assignment",
+  labels = "fallback"
+)
 ```
 
-The total counts remain unchanged after smoothing.
+The overall counts and effective grid-zone totals remain unchanged after
+smoothing.
 
 ```{r pycno-count-check}
-count_check(merge_case, merge_pycno)
+count_check(fallback_case, fallback_pycno)
+
+grid_zone_totals <- fallback_surface |>
+  st_drop_geometry() |>
+  group_by(source_id) |>
+  summarise(across(c(A, B), sum), .groups = "drop")
+
+pycno_zone_totals <- fallback_pycno_surface |>
+  st_drop_geometry() |>
+  group_by(source_id) |>
+  summarise(across(c(A, B), sum), .groups = "drop")
+
+left_join(
+  grid_zone_totals,
+  pycno_zone_totals,
+  by = "source_id",
+  suffix = c("_grid", "_pycno")
+)
+
+fallback_surface |>
+  st_drop_geometry() |>
+  filter(fallback_cell) |>
+  select(cell, A_grid = A, B_grid = B) |>
+  left_join(
+    fallback_pycno_surface |>
+      st_drop_geometry() |>
+      filter(fallback_cell) |>
+      select(cell, A_pycno = A, B_pycno = B),
+    by = "cell"
+  ) |>
+  mutate(
+    A_share_grid = A_grid / (A_grid + B_grid),
+    A_share_pycno = A_pycno / (A_pycno + B_pycno)
+  )
 ```
 
 # Using the Surface in spseg()
@@ -284,19 +484,20 @@ internally before local environments and segregation indices are calculated.
 
 ```{r spseg-surface-call}
 grid_result <- spseg(
-  merge_case[, c("A", "B")],
+  fallback_case[, c("A", "B")],
   surface = "grid",
-  nrow = 2,
-  ncol = 4,
+  nrow = 6,
+  ncol = 6,
   bands = c(1, 2),
   output = "full"
 )
 
 pycno_result <- spseg(
-  merge_case[, c("A", "B")],
+  fallback_case[, c("A", "B")],
   surface = "pycno",
-  nrow = 2,
-  ncol = 4,
+  surface_audit = TRUE,
+  nrow = 6,
+  ncol = 6,
   bands = c(1, 2),
   output = "full",
   converge = 1
@@ -304,5 +505,16 @@ pycno_result <- spseg(
 
 as.data.frame(grid_result, what = "indices")
 as.data.frame(pycno_result, what = "indices")
+
+pycno_result$surface_info$fallback
+names(pycno_result$surface_info$audit)
+head(pycno_result$surface_info$audit$cells)
+pycno_result$surface_info$audit$fallback
 ```
 
+The lightweight `surface_info$grid` and `surface_info$fallback` fields are
+stored for gridded surfaces by default. Setting `surface_audit = TRUE` also
+retains the source data and geometry, the mapping between full raster cells and
+compact result rows, explicit fallback contributions, initial grid counts, and
+smoothed counts. This audit information is retained even when
+`output = "indices"`.

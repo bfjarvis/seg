@@ -312,6 +312,58 @@ test_that("raw, grid, and pycno surfaces preserve overall group totals", {
   expect_equal(unname(colSums(pycno$data)), unname(expected), tolerance = 1e-8)
 })
 
+test_that("surface audit retains grid and pycno intermediates", {
+  geom <- sf::st_make_grid(
+    sf::st_as_sfc(sf::st_bbox(c(xmin = 0, ymin = 0, xmax = 2, ymax = 2))),
+    n = c(2, 2)
+  )
+  values <- matrix(c(10, 0,
+                     0, 10,
+                     5, 5,
+                     3, 7),
+                   ncol = 2, byrow = TRUE,
+                   dimnames = list(NULL, c("a", "b")))
+  x <- sf::st_sf(a = values[, 1], b = values[, 2], geometry = geom)
+
+  minimal <- spseg(
+    x,
+    bands = 1,
+    surface = "grid",
+    nrow = 4,
+    ncol = 4,
+    output = "indices"
+  )
+  audited <- spseg(
+    x,
+    bands = 1,
+    surface = "pycno",
+    surface_audit = TRUE,
+    nrow = 4,
+    ncol = 4,
+    converge = 1,
+    output = "indices"
+  )
+
+  expect_null(minimal$surface_info$audit)
+  expect_equal(minimal$surface_info$fallback$count, 0L)
+  expect_null(audited$data)
+  expect_equal(audited$surface_info$type, "pycno")
+  expect_equal(audited$surface_info$grid$retained_cells, 16L)
+  expect_equal(
+    unname(audited$surface_info$audit$source$data),
+    unname(values)
+  )
+  expect_s3_class(audited$surface_info$audit$source$geometry, "sfc")
+  expect_equal(nrow(audited$surface_info$audit$cells), 16L)
+  expect_equal(dim(audited$surface_info$audit$initial_counts), c(16L, 2L))
+  expect_equal(dim(audited$surface_info$audit$smoothed_counts), c(16L, 2L))
+  expect_equal(
+    colSums(audited$surface_info$audit$initial_counts),
+    colSums(audited$surface_info$audit$smoothed_counts),
+    tolerance = 1e-8
+  )
+})
+
 test_that("grid surfaces assign missing non-empty polygons to fallback cells", {
   tiny <- sf::st_polygon(list(rbind(c(0, 0), c(0.1, 0), c(0.1, 0.1),
                                     c(0, 0.1), c(0, 0))))
@@ -324,18 +376,26 @@ test_that("grid surfaces assign missing non-empty polygons to fallback cells", {
   )
   checked <- suppressMessages(seg:::chksegdata(x[, c("a", "b")]))
 
-  result <- expect_no_warning(
-    seg:::spseg_surface(
+  expect_warning(
+    result <- seg:::spseg_surface(
       x = x[, c("a", "b")],
       coords = checked$coords,
       data = checked$data,
       surface = "grid",
       args = list(nrow = 2, ncol = 2),
+      audit = TRUE,
       verbose = FALSE
-    )
+    ),
+    "1 populated source polygon"
   )
 
   expect_true(1L %in% result$fallback$ids)
+  expect_equal(result$surface_info$fallback$count, 1L)
+  expect_equal(result$surface_info$audit$fallback$source_id, 1L)
+  expect_equal(
+    as.numeric(result$surface_info$audit$fallback[1, c("a", "b")]),
+    c(10, 0)
+  )
   expect_equal(
     colSums(result$data),
     colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")]))),
@@ -350,15 +410,16 @@ test_that("grid surfaces assign missing non-empty polygons to fallback cells", {
     tolerance = 1e-8
   )
 
-  pycno <- expect_no_warning(
-    seg:::spseg_surface(
+  expect_warning(
+    pycno <- seg:::spseg_surface(
       x = x[, c("a", "b")],
       coords = checked$coords,
       data = checked$data,
       surface = "pycno",
       args = list(nrow = 2, ncol = 2, converge = 1),
       verbose = FALSE
-    )
+    ),
+    "not preserved as separate zonal constraints"
   )
   expect_equal(
     unname(colSums(pycno$data)),
@@ -367,47 +428,78 @@ test_that("grid surfaces assign missing non-empty polygons to fallback cells", {
   )
 })
 
-test_that("grid fallback merges multiple missing polygons into represented cells", {
-  tiny_1 <- sf::st_polygon(list(rbind(c(0, 0), c(0.1, 0), c(0.1, 0.1),
-                                      c(0, 0.1), c(0, 0))))
-  tiny_2 <- sf::st_polygon(list(rbind(c(0.12, 0), c(0.22, 0),
-                                      c(0.22, 0.1), c(0.12, 0.1),
-                                      c(0.12, 0))))
-  large <- sf::st_polygon(list(rbind(c(0.3, 0), c(5, 0), c(5, 5),
-                                     c(0.3, 5), c(0.3, 0))))
+test_that("grid fallback preserves the locations of missing polygon counts", {
+  tiny_1 <- sf::st_polygon(list(rbind(c(0, 0), c(0.2, 0), c(0.2, 1),
+                                      c(0, 1), c(0, 0))))
+  tiny_2 <- sf::st_polygon(list(rbind(c(0, 1), c(0.2, 1), c(0.2, 2),
+                                      c(0, 2), c(0, 1))))
+  large_1 <- sf::st_polygon(list(rbind(c(0.2, 0), c(2, 0), c(2, 2),
+                                       c(0.2, 2), c(0.2, 0))))
+  large_2 <- sf::st_polygon(list(rbind(c(2, 0), c(4, 0), c(4, 2),
+                                       c(2, 2), c(2, 0))))
   x <- sf::st_sf(
-    a = c(10, 7, 20),
-    b = c(1, 3, 5),
-    geometry = sf::st_sfc(tiny_1, tiny_2, large)
+    a = c(10, 0, 20, 0),
+    b = c(0, 6, 4, 30),
+    geometry = sf::st_sfc(tiny_1, tiny_2, large_1, large_2)
   )
   checked <- suppressMessages(seg:::chksegdata(x[, c("a", "b")]))
 
-  result <- expect_no_warning(
-    seg:::spseg_surface(
+  expect_warning(
+    result <- seg:::spseg_surface(
       x = x[, c("a", "b")],
       coords = checked$coords,
       data = checked$data,
       surface = "grid",
-      args = list(nrow = 1, ncol = 1),
+      args = list(nrow = 2, ncol = 4),
       verbose = FALSE
-    )
+    ),
+    "2 populated source polygon"
   )
 
   expect_true(all(c(1L, 2L) %in% result$fallback$ids))
   fallback_cells <- result$fallback$cells[
     match(c(1L, 2L), result$fallback$ids)
   ]
-  expect_length(unique(fallback_cells), 1L)
+  expect_length(unique(fallback_cells), 2L)
   expect_equal(
     unname(colSums(result$data)),
     unname(colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")])))),
     tolerance = 1e-8
   )
-  expect_equal(result$id, 3L)
+
+  base_large_1 <- c(a = 5, b = 1)
   expect_equal(
-    unname(result$data),
-    unname(matrix(colSums(as.matrix(sf::st_drop_geometry(x[, c("a", "b")]))),
-                  nrow = 1)),
+    unname(result$data[fallback_cells[1], ]),
+    unname(base_large_1 + c(a = 10, b = 0)),
+    tolerance = 1e-8
+  )
+  expect_equal(
+    unname(result$data[fallback_cells[2], ]),
+    unname(base_large_1 + c(a = 0, b = 6)),
+    tolerance = 1e-8
+  )
+  other_large_1_cells <- setdiff(which(result$id == 3L), fallback_cells)
+  expect_equal(
+    unname(result$data[other_large_1_cells, , drop = FALSE]),
+    unname(matrix(base_large_1, nrow = length(other_large_1_cells),
+                  ncol = 2, byrow = TRUE)),
+    tolerance = 1e-8
+  )
+
+  expect_warning(
+    pycno <- seg:::spseg_surface(
+      x = x[, c("a", "b")],
+      coords = checked$coords,
+      data = checked$data,
+      surface = "pycno",
+      args = list(nrow = 2, ncol = 4, converge = 1),
+      verbose = FALSE
+    ),
+    "not preserved as separate zonal constraints"
+  )
+  expect_equal(
+    unname(rowsum(pycno$data, pycno$id)),
+    unname(rowsum(result$data, result$id)),
     tolerance = 1e-8
   )
 })

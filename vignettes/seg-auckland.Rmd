@@ -275,7 +275,7 @@ spseg(
 ```
 
 
-The exposure/isolation values are a bit more complited, but can be returned in long form using the `what='exposure'` option in `as.data.frame()`.
+The exposure/isolation values are a bit more complicated, but can be returned in long form using the `what='exposure'` option in `as.data.frame()`.
 
 ```{r exposure-curve}
 head(auck_poly_exp<-as.data.frame(auck_seg_bw, what = "exposure") )

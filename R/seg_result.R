@@ -22,6 +22,7 @@ spseg_result <- function(
   geometry = NULL,
   crs = st_crs(as.character(NA)),
   surface = "raw",
+  surface_info = NULL,
   output = "indices",
   call = NULL
 ) {
@@ -47,6 +48,7 @@ spseg_result <- function(
     ),
     crs = st_crs(crs),
     surface = surface,
+    surface_info = surface_info,
     output = output,
     call = call
   )
@@ -106,8 +108,9 @@ spseg_result <- function(
 #'
 #' A `seg_result` is a plain S3 list. The most commonly used fields are:
 #' `bands`, `indices`, `env`, `coords`, `data`, `geometry`, `neighbors`,
-#' and `crs`. When `spseg(output = "indices")`, local environments and input
-#' data are not stored. When `spseg(output = "localenv")`, indices are not
+#' `surface_info`, and `crs`. When `spseg(output = "indices")`, local
+#' environments and input data are not stored. Surface audit information is
+#' retained when requested. When `spseg(output = "localenv")`, indices are not
 #' calculated.
 #'
 #' @param x A `seg_result` object.
@@ -143,6 +146,15 @@ print.seg_result <- function(x, ...) {
   cat("Neighborhood units    :", x$neighbors$units %||% "distance", "\n")
   cat("Search engine         :", x$neighbors$engine %||% "kdtree", "\n")
   cat("Surface               :", x$surface %||% "raw", "\n")
+  if (!is.null(x$surface_info)) {
+    fallback_count <- x$surface_info$fallback$count %||% 0L
+    cat("Surface fallbacks     :", fallback_count, "\n")
+    cat(
+      "Surface audit         :",
+      if (is.null(x$surface_info$audit)) "not stored" else "stored",
+      "\n"
+    )
+  }
   cat(
     "Local environments    :",
     if (is.null(x$env)) "not stored" else "stored",

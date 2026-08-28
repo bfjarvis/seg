@@ -149,8 +149,8 @@ calculate_indices <- function(local_env, label) {
       p_A = A / local_total,
       p_B = B / local_total,
       E_i = -(xlogx(p_A) + xlogx(p_B)) / log(2),
-      H_contribution = t_i * E_i,
-      D_contribution = t_i * (
+      H_contrib = t_i * E_i,
+      D_contrib = t_i * (
         abs(p_A - regional$P_A) + abs(p_B - regional$P_B)
       )
     )
@@ -158,8 +158,8 @@ calculate_indices <- function(local_env, label) {
   indices <- unit_calculations |>
     summarise(
       scenario = label,
-      information = 1 - sum(H_contribution) / (regional$T * regional$E),
-      dissimilarity = sum(D_contribution) / (2 * regional$T * regional$I)
+      information = 1 - sum(H_contrib) / (regional$T * regional$E),
+      dissimilarity = sum(D_contrib) / (2 * regional$T * regional$I)
     )
 
   list(
@@ -188,7 +188,7 @@ raw_calc <- calculate_indices(raw_env, "No spatial weighting")
 
 raw_calc$regional
 raw_calc$units |>
-  select(id, t_i, A, B, p_A, p_B, E_i, H_contribution, D_contribution)
+  select(id, t_i, A, B, p_A, p_B, E_i, H_contrib, D_contrib)
 ```
 
 # Bandwidth 1 Without Distance Weights
@@ -198,29 +198,29 @@ pair inside the bandwidth. The unweighted local environment gives each listed
 neighbor, including the focal cell, equal weight.
 
 ```{r radius-neighbors}
-neighbor_pairs <- grid |>
+nghbr_pairs <- grid |>
   select(focal_id = id, focal_x = x, focal_y = y) |>
   tidyr::crossing(
     grid |>
-      select(neighbor_id = id, neighbor_x = x, neighbor_y = y, A, B)
+      select(nghbr_id = id, nghbr_x = x, nghbr_y = y, A, B)
   ) |>
   mutate(
     distance = sqrt(
-      (focal_x - neighbor_x)^2 + (focal_y - neighbor_y)^2
+      (focal_x - nghbr_x)^2 + (focal_y - nghbr_y)^2
     )
   ) |>
   filter(distance <= 1) |>
-  arrange(focal_id, distance, neighbor_id)
+  arrange(focal_id, distance, nghbr_id)
 
-neighbor_pairs
+nghbr_pairs
 ```
 
 ```{r unweighted-env}
-unweighted_env <- neighbor_pairs |>
+unweighted_env <- nghbr_pairs |>
   mutate(weight = 1) |>
   group_by(id = focal_id) |>
   summarise(
-    neighbors = paste(neighbor_id, collapse = ", "),
+    neighbors = paste(nghbr_id, collapse = ", "),
     A = sum(weight * A) / sum(weight),
     B = sum(weight * B) / sum(weight),
     .groups = "drop"
@@ -236,7 +236,7 @@ unweighted_calc <- calculate_indices(
 )
 
 unweighted_calc$units |>
-  select(id, t_i, A, B, p_A, p_B, E_i, H_contribution, D_contribution)
+  select(id, t_i, A, B, p_A, p_B, E_i, H_contrib, D_contrib)
 ```
 
 # Bandwidth 1 With Distance Weights
@@ -247,11 +247,11 @@ is 1, the focal cell has weight `exp(0) = 1` and each edge-adjacent neighbor
 has weight `exp(-1)`.
 
 ```{r weighted-env}
-weighted_env <- neighbor_pairs |>
+weighted_env <- nghbr_pairs |>
   mutate(weight = exp(-distance / 1)) |>
   group_by(id = focal_id) |>
   summarise(
-    neighbors = paste(neighbor_id, collapse = ", "),
+    neighbors = paste(nghbr_id, collapse = ", "),
     weight_sum = sum(weight),
     A = sum(weight * A) / weight_sum,
     B = sum(weight * B) / weight_sum,
@@ -268,7 +268,7 @@ weighted_calc <- calculate_indices(
 )
 
 weighted_calc$units |>
-  select(id, t_i, A, B, p_A, p_B, E_i, H_contribution, D_contribution)
+  select(id, t_i, A, B, p_A, p_B, E_i, H_contrib, D_contrib)
 ```
 
 # Compare with spseg()
